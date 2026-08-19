@@ -1,0 +1,51 @@
+[
+  {
+    "id": "burgers",
+    "name": "Burgers",
+    "items": [
+      { "name": "Misfits Burger", "price": 24 },
+      { "name": "Queen Burger", "price": 26 },
+      { "name": "Ramones Burger", "price": 28 },
+      { "name": "Rancid Burger", "price": 30 },
+      { "name": "The Clash Burger", "price": 38 }
+    ]
+  },
+  {
+    "id": "sandwiches-wraps",
+    "name": "Sandwiches & Wraps",
+    "items": [
+      { "name": "Chicken Club", "price": 19 },
+      { "name": "American Way", "price": 16 },
+      { "name": "Fat Cat", "price": 16 },
+      { "name": "Chicken Quesadilla", "price": 20 }
+    ]
+  },
+  {
+    "id": "piqueos",
+    "name": "Piqueos",
+    "items": [
+      { "name": "Wings", "price": 25 },
+      { "name": "Papas Bravas", "price": 16 },
+      { "name": "Papas & Cheddar", "price": 16 },
+      { "name": "Chori-Bravas", "price": 18 },
+      { "name": "Nachos", "price": 15 },
+      { "name": "Tequeños", "price": 18 }
+    ]
+  },
+  {
+    "id": "cervezas-artesanales",
+    "name": "Cervezas Artesanales",
+    "items": [
+      { "name": "Invictus", "price": 16 },
+      { "name": "Jack Vled", "price": 16 },
+      { "name": "7 Vidas", "price": 18 },
+      { "name": "Dörcher Bier", "price": 16 },
+      { "name": "Craftsman", "price": 16 },
+      { "name": "Greenga", "price": 16 },
+      { "name": "Caños del Santero", "price": 18 },
+      { "name": "Cerv. del Valle Sagrado", "price": 18 },
+      { "name": "Zátara", "price": 16 }
+    ]
+  }
+]
+
