@@ -4,7 +4,17 @@ import type { MenuCategory } from './data/types'
 import './App.css'
 
 type CartItem = { id: string; name: string; price: number; quantity: number }
+type SubmittedOrder = {
+  customerName: string
+  customerPhone: string
+  fulfillment: 'delivery' | 'pickup'
+  address: string
+  paymentMethod: string
+  items: CartItem[]
+  subtotal: number
+}
 const menuCategories = menuData as MenuCategory[]
+const whatsappNumber = '51933622680'
 
 function App() {
   const [activeCategoryId, setActiveCategoryId] = useState(menuCategories[0].id)
@@ -14,6 +24,7 @@ function App() {
   const [fulfillment, setFulfillment] = useState<'delivery' | 'pickup'>('delivery')
   const [paymentMethod, setPaymentMethod] = useState('Efectivo')
   const [isOrderSubmitted, setIsOrderSubmitted] = useState(false)
+  const [submittedOrder, setSubmittedOrder] = useState<SubmittedOrder | null>(null)
   const activeCategory = menuCategories.find(({ id }) => id === activeCategoryId) ?? menuCategories[0]
   const itemCount = cartItems.reduce((total, item) => total + item.quantity, 0)
   const subtotal = useMemo(() => cartItems.reduce((total, item) => total + item.price * item.quantity, 0), [cartItems])
@@ -43,6 +54,23 @@ function App() {
     setIsCheckoutOpen(true)
     setIsOrderSubmitted(false)
   }
+  const whatsappLink = submittedOrder
+    ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
+      [
+        '🐈‍⬛ *NUEVO PEDIDO · THE BLACK CAT*',
+        '',
+        ...submittedOrder.items.map((item) => `• ${item.quantity}x ${item.name} — S/ ${(item.price * item.quantity).toFixed(2)}`),
+        '',
+        `*Total productos:* S/ ${submittedOrder.subtotal.toFixed(2)}`,
+        `*Entrega:* ${submittedOrder.fulfillment === 'delivery' ? 'Delivery' : 'Recojo en el bar'}`,
+        `*Pago:* ${submittedOrder.paymentMethod}`,
+        '',
+        `*Cliente:* ${submittedOrder.customerName}`,
+        `*Celular:* ${submittedOrder.customerPhone}`,
+        submittedOrder.fulfillment === 'delivery' ? `*Dirección:* ${submittedOrder.address}` : '',
+      ].filter(Boolean).join('\n'),
+    )}`
+    : '#'
 
   return (
     <main className="app-shell">
@@ -141,12 +169,26 @@ function App() {
               <div className="order-success">
                 <span aria-hidden="true">✦</span><p className="eyebrow">PEDIDO REGISTRADO</p>
                 <h3>¡Gracias por tu pedido!</h3>
-                <p>Tu pedido quedó registrado como una demostración local. El siguiente módulo lo conectará al panel de pedidos.</p>
-                <strong>Total de productos: S/ {subtotal.toFixed(2)}</strong>
+                <p>Revisa el mensaje y envíalo por WhatsApp para que el bar reciba tu pedido.</p>
+                <strong>Total de productos: S/ {submittedOrder?.subtotal.toFixed(2)}</strong>
+                <a className="whatsapp-button" href={whatsappLink} target="_blank" rel="noreferrer">Enviar pedido por WhatsApp</a>
                 <button className="checkout-button" type="button" onClick={() => { setCartItems([]); setIsCheckoutOpen(false) }}>Volver al menú</button>
               </div>
             ) : (
-              <form className="checkout-form" onSubmit={(event) => { event.preventDefault(); setIsOrderSubmitted(true) }}>
+              <form className="checkout-form" onSubmit={(event) => {
+                event.preventDefault()
+                const formData = new FormData(event.currentTarget)
+                setSubmittedOrder({
+                  customerName: String(formData.get('name')),
+                  customerPhone: String(formData.get('phone')),
+                  fulfillment,
+                  address: fulfillment === 'delivery' ? String(formData.get('address')) : '',
+                  paymentMethod,
+                  items: cartItems,
+                  subtotal,
+                })
+                setIsOrderSubmitted(true)
+              }}>
                 <fieldset>
                   <legend>¿Cómo quieres recibirlo?</legend>
                   <div className="choice-grid">
