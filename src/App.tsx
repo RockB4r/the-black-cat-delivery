@@ -107,7 +107,8 @@ function App() {
         </div>
         <div className="product-grid" role="tabpanel">
           {activeCategory.items.map((item, index) => (
-            <article className="product-card" key={item.name}>
+            <article className={item.image ? 'product-card has-image' : 'product-card'} key={item.name}>
+              {item.image && <img className="product-image" src={item.image} alt={item.name} />}
               <span className="product-number">{String(index + 1).padStart(2, '0')}</span>
               <h3>{item.name}</h3>
               <div className="product-footer">

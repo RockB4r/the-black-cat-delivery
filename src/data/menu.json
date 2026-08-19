@@ -3,7 +3,7 @@
     "id": "burgers",
     "name": "Burgers",
     "items": [
-      { "name": "Misfits Burger", "price": 24 },
+      { "name": "Misfits Burger", "price": 24, "image": "/productos/misfits-burger.jpg" },
       { "name": "Queen Burger", "price": 26 },
       { "name": "Ramones Burger", "price": 28 },
       { "name": "Rancid Burger", "price": 30 },
@@ -48,4 +48,3 @@
     ]
   }
 ]
-

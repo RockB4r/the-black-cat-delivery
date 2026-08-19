@@ -1,5 +1,5 @@
 export type MenuCategory = {
   id: string
   name: string
-  items: Array<{ name: string; price: number }>
+  items: Array<{ name: string; price: number; image?: string }>
 }
