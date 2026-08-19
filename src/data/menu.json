@@ -3,11 +3,11 @@
     "id": "burgers",
     "name": "Burgers",
     "items": [
-      { "name": "Misfits Burger", "price": 24, "image": "/productos/misfits-burger.jpg" },
-      { "name": "Queen Burger", "price": 26, "image": "/productos/Queen.jpg" },
-      { "name": "Ramones Burger", "price": 28, "image": "/productos/Ramones.jpg" },
-      { "name": "Rancid Burger", "price": 30, "image": "/productos/Rancid.jpg" },
-      { "name": "The Clash Burger", "price": 38, "image": "/productos/TheClash.jpg" }
+      { "name": "Misfits Burger", "price": 24, "image": "/productos/misfits-burger.jpg", "ingredients": "Salsa casera, lechuga, tomate, 150g de res, cheddar, pickles y crispy onions." },
+      { "name": "Queen Burger", "price": 26, "image": "/productos/Queen.jpg", "ingredients": "Salsa casera, lechuga, tomate, 150g de res, cheddar, huevo y cebolla caramelizada." },
+      { "name": "Ramones Burger", "price": 28, "image": "/productos/Ramones.jpg", "ingredients": "Lechuga, tomate, 150g de res, cheddar, huevo, doble crispy bacon, salsa BBQ y crispy onions." },
+      { "name": "Rancid Burger", "price": 30, "image": "/productos/Rancid.jpg", "ingredients": "Salsa casera, 150g de res, cheddar, chorizo parrillero, cebolla caramelizada y jalapeños." },
+      { "name": "The Clash Burger", "price": 38, "image": "/productos/TheClash.jpg", "ingredients": "Salsa chipotle, 300g de res, doble cheddar o Edam, chimichurri, crispy onions y jalapeños (opcional)." }
     ]
   },
   {

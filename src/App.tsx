@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import menuData from './data/menu.json'
-import type { MenuCategory } from './data/types'
+import type { MenuCategory, MenuItem } from './data/types'
 import './App.css'
 
 type CartItem = { id: string; name: string; price: number; quantity: number }
@@ -25,6 +25,7 @@ function App() {
   const [paymentMethod, setPaymentMethod] = useState('Efectivo')
   const [isOrderSubmitted, setIsOrderSubmitted] = useState(false)
   const [submittedOrder, setSubmittedOrder] = useState<SubmittedOrder | null>(null)
+  const [selectedProduct, setSelectedProduct] = useState<MenuItem | null>(null)
   const activeCategory = menuCategories.find(({ id }) => id === activeCategoryId) ?? menuCategories[0]
   const itemCount = cartItems.reduce((total, item) => total + item.quantity, 0)
   const subtotal = useMemo(() => cartItems.reduce((total, item) => total + item.price * item.quantity, 0), [cartItems])
@@ -107,18 +108,56 @@ function App() {
         </div>
         <div className="product-grid" role="tabpanel">
           {activeCategory.items.map((item, index) => (
-            <article className={item.image ? 'product-card has-image' : 'product-card'} key={item.name}>
+            <article
+              className={item.image ? 'product-card has-image' : 'product-card'}
+              key={item.name}
+              role="button"
+              tabIndex={0}
+              aria-label={'Ver detalles de ' + item.name}
+              onClick={() => setSelectedProduct(item)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  setSelectedProduct(item)
+                }
+              }}
+            >
               {item.image && <img className="product-image" src={item.image} alt={item.name} />}
               <span className="product-number">{String(index + 1).padStart(2, '0')}</span>
               <h3>{item.name}</h3>
               <div className="product-footer">
                 <p className="price">S/ {item.price.toFixed(2)}</p>
-                <button className="add-button" type="button" onClick={() => addToCart(item)}>Añadir <span aria-hidden="true">＋</span></button>
+                <button className="add-button" type="button" onClick={(event) => { event.stopPropagation(); addToCart(item) }}>Añadir <span aria-hidden="true">＋</span></button>
               </div>
             </article>
           ))}
         </div>
       </section>
+
+      {selectedProduct && (
+        <div className="product-modal-layer" role="presentation" onClick={() => setSelectedProduct(null)}>
+          <section className="product-modal" role="dialog" aria-modal="true" aria-labelledby="product-modal-title" onClick={(event) => event.stopPropagation()}>
+            <button className="close-button product-modal-close" type="button" aria-label="Cerrar detalles del producto" onClick={() => setSelectedProduct(null)}>×</button>
+            {selectedProduct.image ? (
+              <img className="product-modal-image" src={selectedProduct.image} alt={selectedProduct.name} />
+            ) : (
+              <div className="product-modal-image product-modal-image-fallback" aria-hidden="true">✦</div>
+            )}
+            <div className="product-modal-content">
+              <p className="eyebrow">THE BLACK CAT MENU</p>
+              <h2 id="product-modal-title">{selectedProduct.name}</h2>
+              <p className="modal-price">S/ {selectedProduct.price.toFixed(2)}</p>
+              <div className="ingredients">
+                <h3>Ingredientes</h3>
+                <p>{selectedProduct.ingredients ?? 'Ingredientes por confirmar.'}</p>
+              </div>
+              <button className="add-button modal-add-button" type="button" onClick={() => { addToCart(selectedProduct); setSelectedProduct(null) }}>
+                Añadir al pedido <span aria-hidden="true">＋</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       <footer><span>THE BLACK CAT · ROCK BAR</span><span>Delivery &amp; recojo</span></footer>
 
