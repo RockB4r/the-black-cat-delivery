@@ -4,10 +4,10 @@
     "name": "Burgers",
     "items": [
       { "name": "Misfits Burger", "price": 24, "image": "/productos/misfits-burger.jpg" },
-      { "name": "Queen Burger", "price": 26 },
-      { "name": "Ramones Burger", "price": 28 },
-      { "name": "Rancid Burger", "price": 30 },
-      { "name": "The Clash Burger", "price": 38 }
+      { "name": "Queen Burger", "price": 26, "image": "/productos/Queen.jpg" },
+      { "name": "Ramones Burger", "price": 28, "image": "/productos/Ramones.jpg" },
+      { "name": "Rancid Burger", "price": 30, "image": "/productos/Rancid.jpg" },
+      { "name": "The Clash Burger", "price": 38, "image": "/productos/TheClash.jpg" }
     ]
   },
   {
