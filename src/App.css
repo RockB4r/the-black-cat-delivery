@@ -305,12 +305,26 @@ h2 { font-size: clamp(34px, 5vw, 52px); letter-spacing: -0.045em; margin-bottom:
   background: radial-gradient(circle at 88% 10%, rgba(233, 74, 46, 0.45), transparent 40%), linear-gradient(145deg, #302b27, #201e1b);
 }
 .product-modal-content { padding: 42px 32px 32px; }
-.product-modal-content h2 { font-size: clamp(40px, 6vw, 58px); line-height: 0.9; margin-bottom: 12px; }
-.modal-price { color: #f7bd3a; font-size: 19px; font-weight: 800; margin-bottom: 32px; }
-.ingredients { border-top: 1px solid rgba(255, 246, 230, 0.14); padding-top: 20px; }
-.ingredients h3 { font-size: 23px; margin-bottom: 8px; }
-.ingredients p { color: #c9c0b3; font-size: 14px; line-height: 1.55; }
-.modal-add-button { margin-top: 21px; width: 100%; padding: 13px; }
+.product-modal-content h2 { font-size: clamp(40px, 6vw, 58px); line-height: 0.9; margin-bottom: 16px; }
+.modal-price { color: #f7bd3a; font-size: 19px; font-weight: 800; margin-bottom: 28px; }
+.ingredients {
+  border-top: 1px solid rgba(255, 246, 230, 0.2);
+  padding: 21px 0 4px;
+}
+.ingredients h3 {
+  color: #f7bd3a;
+  font-size: 22px;
+  letter-spacing: 0.01em;
+  margin-bottom: 11px;
+}
+.ingredients p {
+  color: #f4ece1;
+  font-size: clamp(16px, 1.6vw, 18px);
+  font-weight: 500;
+  line-height: 1.55;
+  margin-bottom: 0;
+}
+.modal-add-button { margin-top: 26px; width: 100%; padding: 13px; }
 
 .cart-layer {
   position: fixed;
@@ -476,6 +490,10 @@ footer {
   .product-modal-image { min-height: 235px; height: 235px; }
   .product-modal-content { padding: 27px 22px 24px; }
   .product-modal-content h2 { font-size: 43px; }
+  .modal-price { margin-bottom: 24px; }
+  .ingredients { padding-top: 18px; }
+  .ingredients h3 { font-size: 21px; margin-bottom: 9px; }
+  .ingredients p { font-size: 16px; line-height: 1.55; }
   .cart-drawer { padding: 22px 18px; }
   .section-heading { align-items: flex-start; flex-direction: column; gap: 13px; }
   footer { padding: 22px 20px 28px; flex-direction: column; gap: 8px; }
