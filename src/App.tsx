@@ -3,7 +3,7 @@ import menuData from './data/menu.json'
 import type { MenuCategory, MenuItem } from './data/types'
 import './App.css'
 
-type CartItem = { id: string; name: string; price: number; quantity: number }
+type CartItem = { id: string; name: string; price: number; quantity: number; note?: string }
 type SubmittedOrder = {
   customerName: string
   customerPhone: string
@@ -26,17 +26,24 @@ function App() {
   const [isOrderSubmitted, setIsOrderSubmitted] = useState(false)
   const [submittedOrder, setSubmittedOrder] = useState<SubmittedOrder | null>(null)
   const [selectedProduct, setSelectedProduct] = useState<MenuItem | null>(null)
+  const [productNote, setProductNote] = useState('')
   const activeCategory = menuCategories.find(({ id }) => id === activeCategoryId) ?? menuCategories[0]
   const itemCount = cartItems.reduce((total, item) => total + item.quantity, 0)
   const subtotal = useMemo(() => cartItems.reduce((total, item) => total + item.price * item.quantity, 0), [cartItems])
 
-  const addToCart = (item: { name: string; price: number }) => {
-    const id = `${activeCategory.id}-${item.name}`
+  const openProductModal = (item: MenuItem) => {
+    setSelectedProduct(item)
+    setProductNote('')
+  }
+
+  const addToCart = (item: { name: string; price: number }, note = '') => {
+    const trimmedNote = note.trim()
+    const id = [activeCategory.id, item.name, trimmedNote].join('-')
     setCartItems((current) => {
       const existing = current.find((cartItem) => cartItem.id === id)
       return existing
         ? current.map((cartItem) => cartItem.id === id ? { ...cartItem, quantity: cartItem.quantity + 1 } : cartItem)
-        : [...current, { ...item, id, quantity: 1 }]
+        : [...current, { ...item, id, note: trimmedNote || undefined, quantity: 1 }]
     })
     setIsCartOpen(true)
   }
@@ -60,7 +67,10 @@ function App() {
       [
         '🐈‍⬛ *NUEVO PEDIDO · THE BLACK CAT*',
         '',
-        ...submittedOrder.items.map((item) => `• ${item.quantity}x ${item.name} — S/ ${(item.price * item.quantity).toFixed(2)}`),
+        ...submittedOrder.items.flatMap((item) => [
+          '• ' + item.quantity + 'x ' + item.name + ' — S/ ' + (item.price * item.quantity).toFixed(2),
+          ...(item.note ? ['  ↳ Nota: ' + item.note] : []),
+        ]),
         '',
         `*Total productos:* S/ ${submittedOrder.subtotal.toFixed(2)}`,
         `*Entrega:* ${submittedOrder.fulfillment === 'delivery' ? 'Delivery' : 'Recojo en el bar'}`,
@@ -114,11 +124,11 @@ function App() {
               role="button"
               tabIndex={0}
               aria-label={'Ver detalles de ' + item.name}
-              onClick={() => setSelectedProduct(item)}
+              onClick={() => openProductModal(item)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault()
-                  setSelectedProduct(item)
+                  openProductModal(item)
                 }
               }}
             >
@@ -151,7 +161,18 @@ function App() {
                 <h3>Ingredientes</h3>
                 <p>{selectedProduct.ingredients ?? 'Ingredientes por confirmar.'}</p>
               </div>
-              <button className="add-button modal-add-button" type="button" onClick={() => { addToCart(selectedProduct); setSelectedProduct(null) }}>
+              <label className="product-note-field">
+                <span>Indicación para cocina</span>
+                <textarea
+                  value={productNote}
+                  onChange={(event) => setProductNote(event.target.value)}
+                  maxLength={150}
+                  rows={3}
+                  placeholder="¿Alguna indicación para cocina?"
+                />
+                <small>{productNote.length}/150</small>
+              </label>
+              <button className="add-button modal-add-button" type="button" onClick={() => { addToCart(selectedProduct, productNote); setProductNote(''); setSelectedProduct(null) }}>
                 Añadir al pedido <span aria-hidden="true">＋</span>
               </button>
             </div>
@@ -175,7 +196,11 @@ function App() {
                 <div className="cart-items">
                   {cartItems.map((item) => (
                     <article className="cart-item" key={item.id}>
-                      <div><h3>{item.name}</h3><p>S/ {item.price.toFixed(2)} c/u</p></div>
+                      <div>
+                        <h3>{item.name}</h3>
+                        {item.note && <p className="cart-item-note">Nota: {item.note}</p>}
+                        <p>S/ {item.price.toFixed(2)} c/u</p>
+                      </div>
                       <div className="cart-item-actions">
                         <button className="remove-button" type="button" onClick={() => removeItem(item.id)}>Quitar</button>
                         <div className="quantity-control">
