@@ -87,7 +87,7 @@ function App() {
 
       <section className="hero-section" id="inicio">
         <p className="eyebrow">ROCK, BURGERS &amp; COLD BEER</p>
-        <h1>El sabor que<br />sube el volumen.</h1>
+        <h1>El Templo del Rock<br />y del espíritu Rebelde.</h1>
         <p className="hero-copy">Pide tus favoritos para delivery o recógelos en el bar.</p>
         <a className="primary-action" href="#menu">Ver el menú <span aria-hidden="true">↓</span></a>
         <div className="service-pills"><span>🛵 Delivery</span><span>✦ Recojo en el bar</span></div>
