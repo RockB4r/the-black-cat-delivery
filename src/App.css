@@ -485,7 +485,13 @@ footer {
 }
 
 @media (max-width: 680px) {
-  .app-shell { background-attachment: scroll; }
+  .app-shell {
+    min-height: 100%;
+    background-size: cover;
+    background-position: center;
+    background-attachment: scroll;
+    background-repeat: no-repeat;
+  }
   .topbar { padding: 14px 18px; min-height: 68px; }
   .hero-section { padding: 82px 20px 64px; }
   .hero-copy { font-size: 16px; }

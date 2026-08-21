@@ -12,9 +12,13 @@
 }
 
 * { box-sizing: border-box; }
+html,
+body,
+#root {
+  min-height: 100%;
+}
 html { scroll-behavior: smooth; }
 body { min-width: 320px; margin: 0; }
 button { font: inherit; cursor: pointer; }
-
 
 
