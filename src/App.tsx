@@ -95,7 +95,7 @@ function App() {
 
       <section className="menu-preview" id="menu" aria-labelledby="menu-title">
         <div className="section-heading">
-          <div><p className="eyebrow">ELIGE TU VENENO</p><h2 id="menu-title">Nuestro menú</h2></div>
+          <div><p className="eyebrow">TONIGHT'S LINE UP</p><h2 id="menu-title">Nuestro menú</h2></div>
           <span className="menu-item-count">{activeCategory.items.length} opciones</span>
         </div>
         <div className="category-tabs" role="tablist" aria-label="Categorías del menú">
