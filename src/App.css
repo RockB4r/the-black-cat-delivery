@@ -485,17 +485,28 @@ footer {
 }
 
 @media (max-width: 680px) {
-  .app-shell {
-    min-height: 100%;
+  body {
+    background-color: #11100f;
+    background-image:
+      linear-gradient(rgba(10, 10, 10, 0.64), rgba(10, 10, 10, 0.78)),
+      url('/backgrounds/background_WebApp.jpg');
     background-size: cover;
     background-position: center;
     background-attachment: scroll;
     background-repeat: no-repeat;
   }
+
+  #root { background: transparent; }
+
+  .app-shell {
+    min-height: 100svh;
+    background-color: transparent;
+    background-image: none;
+  }
   .topbar { padding: 14px 18px; min-height: 68px; }
   .hero-section { padding: 82px 20px 64px; }
   .hero-copy { font-size: 16px; }
-  .menu-preview { padding: 58px 20px 62px; }
+  .menu-preview { padding: 58px 20px 62px; background: rgba(28, 26, 24, 0.82); }
   .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .product-card { min-height: 164px; padding: 18px; }
   .product-card h3 { font-size: 24px; }
