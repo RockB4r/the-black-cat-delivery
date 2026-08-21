@@ -1,7 +1,14 @@
 .app-shell {
   min-height: 100svh;
   overflow: hidden;
-  background: #11100f;
+  background-color: #11100f;
+  background-image:
+    linear-gradient(rgba(10, 10, 10, 0.64), rgba(10, 10, 10, 0.78)),
+    url('/backgrounds/background_WebApp.jpg');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
 }
 
 .topbar,
@@ -166,7 +173,7 @@ h1 {
 
 .menu-preview {
   padding: 72px 28px 88px;
-  background: #1c1a18;
+  background: rgba(28, 26, 24, 0.9);
 }
 
 .section-heading {
@@ -478,6 +485,7 @@ footer {
 }
 
 @media (max-width: 680px) {
+  .app-shell { background-attachment: scroll; }
   .topbar { padding: 14px 18px; min-height: 68px; }
   .hero-section { padding: 82px 20px 64px; }
   .hero-copy { font-size: 16px; }
