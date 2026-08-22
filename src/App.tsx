@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import menuData from './data/menu.json'
 import type { MenuCategory, MenuItem } from './data/types'
 import './App.css'
@@ -18,6 +18,7 @@ type CulqiChargeResponse = {
   approved: boolean
   message?: string
   chargeId?: string
+  orderId?: string
 }
 const menuCategories = menuData as MenuCategory[]
 const whatsappNumber = '51933622680'
@@ -36,12 +37,28 @@ function App() {
   const [customerEmail, setCustomerEmail] = useState('')
   const [culqiMessage, setCulqiMessage] = useState('')
   const [isProcessingPayment, setIsProcessingPayment] = useState(false)
+  const checkoutFormRef = useRef<HTMLFormElement>(null)
   const activeCategory = menuCategories.find(({ id }) => id === activeCategoryId) ?? menuCategories[0]
   const itemCount = cartItems.reduce((total, item) => total + item.quantity, 0)
   const subtotal = useMemo(() => cartItems.reduce((total, item) => total + item.price * item.quantity, 0), [cartItems])
   const hasValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim())
   const canPayWithCulqi = cartItems.length > 0 && subtotal > 0 && hasValidEmail
+  const isCashPayment = paymentMethod === 'Efectivo'
   const culqiPublicKey = import.meta.env.VITE_CULQI_PUBLIC_KEY
+
+  const getOrderPayload = () => {
+    const form = checkoutFormRef.current
+    if (!form || !form.reportValidity()) return null
+    const formData = new FormData(form)
+    return {
+      customer: String(formData.get('name')).trim(),
+      phone: String(formData.get('phone')).trim(),
+      email: customerEmail.trim(),
+      address: fulfillment === 'delivery' ? String(formData.get('address')).trim() : '',
+      fulfillment,
+      items: cartItems.map(({ name, quantity, note }) => ({ name, quantity, note })),
+    }
+  }
 
   const openProductModal = (item: MenuItem) => {
     setSelectedProduct(item)
@@ -78,6 +95,8 @@ function App() {
   const handleCulqiAction = async (culqi: CulqiCheckoutInstance) => {
     if (culqi.token) {
       culqi.close()
+      const order = getOrderPayload()
+      if (!order) return
       setIsProcessingPayment(true)
       setCulqiMessage('Procesando pago...')
 
@@ -89,9 +108,10 @@ function App() {
             token: culqi.token.id,
             amount: Math.round(subtotal * 100),
             currency: 'PEN',
-            email: customerEmail.trim(),
+            ...order,
+            email: order.email,
             description: `Pedido The Black Cat Rock Bar · ${itemCount} producto(s)`,
-            items: cartItems.map(({ name, quantity }) => ({ name, quantity })),
+            items: order.items,
           }),
         })
         const result = await response.json() as CulqiChargeResponse
@@ -101,7 +121,7 @@ function App() {
           return
         }
 
-        setCulqiMessage(`Pago aprobado${result.chargeId ? ` · operación ${result.chargeId}` : ''}. Tu carrito se mantiene para confirmar el pedido.`)
+        setCulqiMessage(`Pago aprobado. Pedido recibido por The Black Cat${result.orderId ? ` · Código: ${result.orderId}` : ''}.`)
       } catch {
         setCulqiMessage('No fue posible conectar con el servicio de pago. Tu carrito se conserva intacto.')
       } finally {
@@ -112,8 +132,7 @@ function App() {
 
     if (culqi.order) {
       culqi.close()
-      console.log('Culqi order recibido:', culqi.order)
-      setCulqiMessage('Orden de Culqi recibida. El backend la procesará en la siguiente etapa.')
+      setCulqiMessage('Pago en proceso de confirmación. El pedido será confirmado cuando Culqi notifique al backend.')
       return
     }
 
@@ -121,8 +140,10 @@ function App() {
     setCulqiMessage('No se pudo iniciar el pago. Revisa los datos e inténtalo nuevamente.')
   }
 
-  const openCulqiCheckout = () => {
+  const openCulqiCheckout = async () => {
     if (!canPayWithCulqi) return
+    const orderPayload = getOrderPayload()
+    if (!orderPayload) return
 
     if (!culqiPublicKey) {
       setCulqiMessage('Falta configurar la llave pública de Culqi para este entorno.')
@@ -136,7 +157,20 @@ function App() {
 
     setCulqiMessage('')
     const amountInCents = Math.round(subtotal * 100)
-    const backendOrderId: string | undefined = undefined
+    let backendOrderId: string | undefined
+    {
+      setIsProcessingPayment(true)
+      try {
+        const response = await fetch('/.netlify/functions/create-culqi-order', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ...orderPayload, amount: amountInCents, currency: 'PEN' }),
+        })
+        const result = await response.json() as { orderId?: string; culqiOrderId?: string; message?: string }
+        if (!response.ok || !result.orderId || !result.culqiOrderId) { setCulqiMessage(result.message ?? 'No fue posible generar la orden de pago.'); return }
+        backendOrderId = result.culqiOrderId
+        setCulqiMessage(`Pago en proceso de confirmación · Pedido: ${result.orderId}`)
+      } catch { setCulqiMessage('No fue posible conectar con el servicio de pago.'); return } finally { setIsProcessingPayment(false) }
+    }
     const settings: CulqiCheckoutSettings = {
       title: 'The Black Cat Rock Bar',
       currency: 'PEN',
@@ -155,10 +189,10 @@ function App() {
         paymentMethods: {
           tarjeta: true,
           yape: true,
-          billetera: Boolean(backendOrderId),
-          bancaMovil: Boolean(backendOrderId),
-          agente: Boolean(backendOrderId),
-          cuotealo: Boolean(backendOrderId),
+          billetera: true,
+          bancaMovil: true,
+          agente: true,
+          cuotealo: true,
         },
         paymentMethodsSort: ['tarjeta', 'yape', 'billetera', 'bancaMovil', 'agente', 'cuotealo'],
       },
@@ -346,9 +380,18 @@ function App() {
                 <button className="checkout-button" type="button" onClick={() => { setCartItems([]); setIsCheckoutOpen(false) }}>Volver al menú</button>
               </div>
             ) : (
-              <form className="checkout-form" onSubmit={(event) => {
+              <form className="checkout-form" ref={checkoutFormRef} onSubmit={async (event) => {
                 event.preventDefault()
                 const formData = new FormData(event.currentTarget)
+                const orderPayload = getOrderPayload()
+                if (!orderPayload) return
+                setIsProcessingPayment(true)
+                try {
+                  const response = await fetch('/.netlify/functions/create-cash-order', {
+                    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(orderPayload),
+                  })
+                  if (!response.ok) { setCulqiMessage('No fue posible registrar el pedido. Inténtalo nuevamente.'); return }
+                } catch { setCulqiMessage('No fue posible registrar el pedido. Inténtalo nuevamente.'); return } finally { setIsProcessingPayment(false) }
                 setSubmittedOrder({
                   customerName: String(formData.get('name')),
                   customerPhone: String(formData.get('phone')),
@@ -384,7 +427,7 @@ function App() {
                 <fieldset>
                   <legend>Método de pago</legend>
                   <div className="payment-options">
-                    {['Efectivo', 'Yape / Plin', 'Tarjeta'].map((method) => (
+                    {['Efectivo', 'Pagar con Culqi'].map((method) => (
                       <label key={method} className={paymentMethod === method ? 'payment-option active' : 'payment-option'}>
                         <input type="radio" name="payment" value={method} checked={paymentMethod === method} onChange={() => setPaymentMethod(method)} />
                         {method}
@@ -394,12 +437,12 @@ function App() {
                 </fieldset>
                 <div className="checkout-total"><span>Productos</span><strong>S/ {subtotal.toFixed(2)}</strong></div>
                 <p className="checkout-disclaimer">El costo de delivery se confirmará según la zona. No se realizará ningún cobro en esta etapa.</p>
-                <button className="culqi-button" type="button" disabled={!canPayWithCulqi || isProcessingPayment} onClick={openCulqiCheckout}>
+                {!isCashPayment && <button className="culqi-button" type="button" disabled={!canPayWithCulqi || isProcessingPayment} onClick={() => { void openCulqiCheckout() }}>
                   {isProcessingPayment ? 'Procesando pago...' : 'Pagar con Culqi'}
-                </button>
+                </button>}
                 {!hasValidEmail && <p className="culqi-help">Ingresa un correo electrónico válido para pagar con Culqi.</p>}
                 {culqiMessage && <p className="culqi-message" role="status">{culqiMessage}</p>}
-                <button className="checkout-button" type="submit">Registrar pedido</button>
+                {isCashPayment && <button className="checkout-button" type="submit">Registrar pedido</button>}
                 <button className="back-button" type="button" onClick={() => { setIsCheckoutOpen(false); setIsCartOpen(true) }}>← Volver al carrito</button>
               </form>
             )}

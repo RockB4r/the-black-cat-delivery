@@ -1,82 +1,24 @@
-import menuData from '../../src/data/menu.json'
-
-type PaymentItem = {
-  name: unknown
-  quantity: unknown
-}
-
-type ChargeRequest = {
-  token?: unknown
-  amount?: unknown
-  currency?: unknown
-  email?: unknown
-  description?: unknown
-  items?: unknown
-}
-
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const catalogPrices = new Map(
-  menuData.flatMap((category) => category.items.map((item) => [item.name, item.price] as const)),
-)
-
-const jsonResponse = (status: number, body: Record<string, unknown>) => new Response(JSON.stringify(body), {
-  status,
-  headers: {
-    'content-type': 'application/json; charset=utf-8',
-    'cache-control': 'no-store',
-  },
-})
-
-const getTrustedAmount = (items: unknown): number | null => {
-  if (!Array.isArray(items) || items.length === 0) return null
-
-  let amount = 0
-  for (const item of items as PaymentItem[]) {
-    const quantity = item.quantity
-    if (typeof item.name !== 'string' || typeof quantity !== 'number' || !Number.isSafeInteger(quantity) || quantity <= 0) return null
-    const price = catalogPrices.get(item.name)
-    if (price === undefined) return null
-    amount += price * quantity * 100
-  }
-
-  return Number.isSafeInteger(amount) && amount > 0 ? amount : null
-}
+import { notifyOrder } from '../lib/notifications'
+import { createOrder, trustedItems } from '../lib/orders'
+import { json, parseOrderInput } from '../lib/request'
 
 export default async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') {
-    return jsonResponse(405, { approved: false, message: 'Método no permitido.' })
+    return json(405, { approved: false, message: 'Método no permitido.' })
   }
 
-  let body: ChargeRequest
-  try {
-    body = await request.json() as ChargeRequest
-  } catch {
-    return jsonResponse(400, { approved: false, message: 'La solicitud de pago no es válida.' })
-  }
-
-  const token = typeof body.token === 'string' ? body.token.trim() : ''
-  const amount = body.amount
-  const currency = body.currency
-  const email = typeof body.email === 'string' ? body.email.trim() : ''
-  const description = typeof body.description === 'string'
-    ? body.description.trim().slice(0, 160)
-    : 'Pedido The Black Cat Rock Bar'
-
-  if (!token || !Number.isSafeInteger(amount) || amount <= 0 || currency !== 'PEN' || !emailPattern.test(email)) {
-    return jsonResponse(400, { approved: false, message: 'Los datos de pago no son válidos.' })
-  }
-
-  // El catálogo se evalúa en el servidor. Cuando exista una base de datos, esta validación
-  // se reemplazará por una orden previamente guardada y un total calculado en el backend.
-  const trustedAmount = getTrustedAmount(body.items)
-  if (trustedAmount === null || trustedAmount !== amount) {
-    return jsonResponse(400, { approved: false, message: 'El total del pedido no pudo validarse.' })
-  }
+  const body: unknown = await request.json().catch(() => null)
+  const data = body as Record<string, unknown> | null
+  const token = typeof data?.token === 'string' ? data.token.trim() : ''
+  const input = parseOrderInput(body, 'card')
+  const validated = trustedItems(data?.items)
+  const amount = data?.amount
+  if (!token || !input || !validated || !Number.isSafeInteger(amount) || amount !== validated.total * 100 || data?.currency !== 'PEN') return json(400, { approved: false, message: 'Los datos de pago no son válidos.' })
 
   const secretKey = process.env.CULQI_SECRET_KEY
   if (!secretKey) {
     console.error('CULQI_SECRET_KEY is not configured.')
-    return jsonResponse(500, { approved: false, message: 'El pago no está disponible temporalmente.' })
+    return json(500, { approved: false, message: 'El pago no está disponible temporalmente.' })
   }
 
   try {
@@ -87,10 +29,10 @@ export default async (request: Request): Promise<Response> => {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        amount: trustedAmount,
+        amount,
         currency_code: 'PEN',
-        email,
-        description,
+        email: input.email,
+        description: `Pedido The Black Cat Rock Bar`,
         source_id: token,
         capture: true,
       }),
@@ -99,20 +41,22 @@ export default async (request: Request): Promise<Response> => {
     const culqiData: unknown = await culqiResponse.json().catch(() => null)
     if (!culqiResponse.ok) {
       if (culqiResponse.status >= 400 && culqiResponse.status < 500) {
-        return jsonResponse(402, { approved: false, message: 'El pago fue rechazado. Verifica tus datos o intenta otro método.' })
+        return json(402, { approved: false, message: 'El pago fue rechazado. Verifica tus datos o intenta otro método.' })
       }
 
       console.error('Culqi charge request failed with status:', culqiResponse.status)
-      return jsonResponse(502, { approved: false, message: 'No fue posible procesar el pago. Inténtalo nuevamente.' })
+      return json(502, { approved: false, message: 'No fue posible procesar el pago. Inténtalo nuevamente.' })
     }
 
     const chargeId = typeof culqiData === 'object' && culqiData !== null && 'id' in culqiData && typeof culqiData.id === 'string'
       ? culqiData.id
       : undefined
 
-    return jsonResponse(200, { approved: true, chargeId })
+    const order = await createOrder(input, 'paid')
+    const notified = await notifyOrder({ ...order, culqiChargeId: chargeId })
+    return json(200, { approved: true, chargeId, orderId: notified.orderId })
   } catch (error) {
     console.error('Culqi charge request failed:', error)
-    return jsonResponse(502, { approved: false, message: 'No fue posible conectar con el servicio de pago. Inténtalo nuevamente.' })
+    return json(502, { approved: false, message: 'No fue posible conectar con el servicio de pago. Inténtalo nuevamente.' })
   }
 }
