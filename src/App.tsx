@@ -7,11 +7,17 @@ type CartItem = { id: string; name: string; price: number; quantity: number; not
 type SubmittedOrder = {
   customerName: string
   customerPhone: string
+  customerEmail: string
   fulfillment: 'delivery' | 'pickup'
   address: string
   paymentMethod: string
   items: CartItem[]
   subtotal: number
+}
+type CulqiChargeResponse = {
+  approved: boolean
+  message?: string
+  chargeId?: string
 }
 const menuCategories = menuData as MenuCategory[]
 const whatsappNumber = '51933622680'
@@ -27,9 +33,15 @@ function App() {
   const [submittedOrder, setSubmittedOrder] = useState<SubmittedOrder | null>(null)
   const [selectedProduct, setSelectedProduct] = useState<MenuItem | null>(null)
   const [productNote, setProductNote] = useState('')
+  const [customerEmail, setCustomerEmail] = useState('')
+  const [culqiMessage, setCulqiMessage] = useState('')
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false)
   const activeCategory = menuCategories.find(({ id }) => id === activeCategoryId) ?? menuCategories[0]
   const itemCount = cartItems.reduce((total, item) => total + item.quantity, 0)
   const subtotal = useMemo(() => cartItems.reduce((total, item) => total + item.price * item.quantity, 0), [cartItems])
+  const hasValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim())
+  const canPayWithCulqi = cartItems.length > 0 && subtotal > 0 && hasValidEmail
+  const culqiPublicKey = import.meta.env.VITE_CULQI_PUBLIC_KEY
 
   const openProductModal = (item: MenuItem) => {
     setSelectedProduct(item)
@@ -61,6 +73,100 @@ function App() {
     setIsCartOpen(false)
     setIsCheckoutOpen(true)
     setIsOrderSubmitted(false)
+  }
+
+  const handleCulqiAction = async (culqi: CulqiCheckoutInstance) => {
+    if (culqi.token) {
+      culqi.close()
+      setIsProcessingPayment(true)
+      setCulqiMessage('Procesando pago...')
+
+      try {
+        const response = await fetch('/.netlify/functions/create-culqi-charge', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            token: culqi.token.id,
+            amount: Math.round(subtotal * 100),
+            currency: 'PEN',
+            email: customerEmail.trim(),
+            description: `Pedido The Black Cat Rock Bar · ${itemCount} producto(s)`,
+            items: cartItems.map(({ name, quantity }) => ({ name, quantity })),
+          }),
+        })
+        const result = await response.json() as CulqiChargeResponse
+
+        if (!response.ok || !result.approved) {
+          setCulqiMessage(result.message ?? 'El pago no pudo procesarse. Tu carrito se conserva intacto.')
+          return
+        }
+
+        setCulqiMessage(`Pago aprobado${result.chargeId ? ` · operación ${result.chargeId}` : ''}. Tu carrito se mantiene para confirmar el pedido.`)
+      } catch {
+        setCulqiMessage('No fue posible conectar con el servicio de pago. Tu carrito se conserva intacto.')
+      } finally {
+        setIsProcessingPayment(false)
+      }
+      return
+    }
+
+    if (culqi.order) {
+      culqi.close()
+      console.log('Culqi order recibido:', culqi.order)
+      setCulqiMessage('Orden de Culqi recibida. El backend la procesará en la siguiente etapa.')
+      return
+    }
+
+    console.error('Error de Culqi:', culqi.error)
+    setCulqiMessage('No se pudo iniciar el pago. Revisa los datos e inténtalo nuevamente.')
+  }
+
+  const openCulqiCheckout = () => {
+    if (!canPayWithCulqi) return
+
+    if (!culqiPublicKey) {
+      setCulqiMessage('Falta configurar la llave pública de Culqi para este entorno.')
+      return
+    }
+
+    if (!window.CulqiCheckout) {
+      setCulqiMessage('El Checkout de Culqi aún no terminó de cargar. Inténtalo nuevamente en unos segundos.')
+      return
+    }
+
+    setCulqiMessage('')
+    const amountInCents = Math.round(subtotal * 100)
+    const backendOrderId: string | undefined = undefined
+    const settings: CulqiCheckoutSettings = {
+      title: 'The Black Cat Rock Bar',
+      currency: 'PEN',
+      amount: amountInCents,
+    }
+
+    // El backend seguro asignará este Order ID en la próxima etapa; no se usa uno fijo en el frontend.
+    if (backendOrderId) settings.order = backendOrderId
+
+    const culqi = new window.CulqiCheckout(culqiPublicKey, {
+      settings,
+      client: { email: customerEmail.trim() },
+      options: {
+        lang: 'es',
+        modal: true,
+        paymentMethods: {
+          tarjeta: true,
+          yape: true,
+          billetera: Boolean(backendOrderId),
+          bancaMovil: Boolean(backendOrderId),
+          agente: Boolean(backendOrderId),
+          cuotealo: Boolean(backendOrderId),
+        },
+        paymentMethodsSort: ['tarjeta', 'yape', 'billetera', 'bancaMovil', 'agente', 'cuotealo'],
+      },
+      appearance: { theme: 'default', menuType: 'sliderTop' },
+    })
+
+    culqi.culqi = () => { void handleCulqiAction(culqi) }
+    culqi.open()
   }
   const whatsappLink = submittedOrder
     ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
@@ -246,6 +352,7 @@ function App() {
                 setSubmittedOrder({
                   customerName: String(formData.get('name')),
                   customerPhone: String(formData.get('phone')),
+                  customerEmail: String(formData.get('email')),
                   fulfillment,
                   address: fulfillment === 'delivery' ? String(formData.get('address')) : '',
                   paymentMethod,
@@ -271,6 +378,7 @@ function App() {
                   <legend>Datos de contacto</legend>
                   <label>Nombre<input name="name" required placeholder="Tu nombre" autoComplete="name" /></label>
                   <label>Celular<input name="phone" required inputMode="tel" placeholder="999 999 999" autoComplete="tel" /></label>
+                  <label>Correo electrónico<input name="email" type="email" required value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)} placeholder="tu@email.com" autoComplete="email" /></label>
                   {fulfillment === 'delivery' && <label>Dirección de delivery<textarea name="address" required placeholder="Calle, número, distrito y referencia" rows={3} /></label>}
                 </fieldset>
                 <fieldset>
@@ -286,6 +394,11 @@ function App() {
                 </fieldset>
                 <div className="checkout-total"><span>Productos</span><strong>S/ {subtotal.toFixed(2)}</strong></div>
                 <p className="checkout-disclaimer">El costo de delivery se confirmará según la zona. No se realizará ningún cobro en esta etapa.</p>
+                <button className="culqi-button" type="button" disabled={!canPayWithCulqi || isProcessingPayment} onClick={openCulqiCheckout}>
+                  {isProcessingPayment ? 'Procesando pago...' : 'Pagar con Culqi'}
+                </button>
+                {!hasValidEmail && <p className="culqi-help">Ingresa un correo electrónico válido para pagar con Culqi.</p>}
+                {culqiMessage && <p className="culqi-message" role="status">{culqiMessage}</p>}
                 <button className="checkout-button" type="submit">Registrar pedido</button>
                 <button className="back-button" type="button" onClick={() => { setIsCheckoutOpen(false); setIsCartOpen(true) }}>← Volver al carrito</button>
               </form>

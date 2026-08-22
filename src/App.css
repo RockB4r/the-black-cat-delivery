@@ -480,6 +480,21 @@ h2 { font-size: clamp(34px, 5vw, 52px); letter-spacing: -0.045em; margin-bottom:
 .checkout-total { display: flex; justify-content: space-between; color: #fff7e8; font-size: 16px; margin: 0 0 10px; }
 .checkout-total strong { font-size: 21px; }
 .checkout-disclaimer { color: #9d9387; font-size: 12px; line-height: 1.4; margin: 0 0 16px; }
+.culqi-button {
+  width: 100%;
+  margin-bottom: 8px;
+  border: 1px solid #f7bd3a;
+  border-radius: 4px;
+  padding: 15px;
+  color: #fff7e8;
+  background: #302a20;
+  font-weight: 900;
+}
+.culqi-button:hover:not(:disabled) { background: #42361e; }
+.culqi-button:disabled { cursor: not-allowed; opacity: 0.48; }
+.culqi-help,
+.culqi-message { color: #a89e91; font-size: 12px; line-height: 1.4; margin: 0 0 13px; }
+.culqi-message { color: #f7bd3a; }
 .back-button { display: block; margin: 17px auto 0; color: #c9c0b3; border: 0; background: none; font-size: 13px; }
 .order-success { margin: auto 0; text-align: center; color: #c9c0b3; }
 .order-success > span { display: block; color: #f7bd3a; font-size: 42px; margin-bottom: 15px; }
