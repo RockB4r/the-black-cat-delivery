@@ -4,6 +4,7 @@ import menuData from '../../src/data/menu.json'
 export type PaymentMethod = 'cash' | 'card' | 'wallet'
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'expired'
 export type NotificationStatus = 'pending' | 'sent' | 'failed'
+export type ReceiptType = 'boleta' | 'factura'
 
 export type OrderItem = { name: string; price: number; quantity: number; note?: string }
 export type StoreOrder = {
@@ -14,6 +15,9 @@ export type StoreOrder = {
   email: string
   address: string
   fulfillment: 'delivery' | 'pickup'
+  receiptType: ReceiptType
+  dni?: string
+  ruc?: string
   items: OrderItem[]
   notes: string[]
   total: number

@@ -13,6 +13,10 @@ const message = (order: StoreOrder) => [
   `Teléfono: ${order.phone}`,
   `Dirección: ${order.address || 'Recojo en el bar'}`,
   '',
+  'COMPROBANTE:',
+  order.receiptType === 'factura' ? 'Factura' : 'Boleta',
+  order.receiptType === 'factura' ? `RUC: ${order.ruc}` : `DNI: ${order.dni || 'No proporcionado'}`,
+  '',
   ...order.items.flatMap((item) => [`${item.quantity} x ${item.name}`, ...(item.note ? [`- ${item.note}`] : [])]),
   '',
   `Total: S/ ${order.total.toFixed(2)}`,
@@ -69,7 +73,24 @@ export const sendOrderWhatsAppNotification = async (order: StoreOrder): Promise<
       headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
       body: JSON.stringify(body),
     })
-    if (!response.ok) throw new Error(`WhatsApp returned ${response.status}.`)
+    if (!response.ok) {
+      const errorBody: unknown = await response.json().catch(() => null)
+      const metaError = errorBody && typeof errorBody === 'object' && 'error' in errorBody && typeof errorBody.error === 'object' && errorBody.error !== null
+        ? errorBody.error as Record<string, unknown>
+        : null
+      const safeErrorBody = metaError
+        ? {
+            message: metaError.message,
+            type: metaError.type,
+            code: metaError.code,
+            error_subcode: metaError.error_subcode,
+            error_data: metaError.error_data,
+            fbtrace_id: metaError.fbtrace_id,
+          }
+        : errorBody
+      console.error('WhatsApp API error', { status: response.status, body: safeErrorBody })
+      throw new Error(`WhatsApp returned ${response.status}.`)
+    }
     return 'sent'
   } catch (error) {
     console.error(`WhatsApp notification failed for ${order.orderId}:`, error)

@@ -1,4 +1,4 @@
-import type { OrderInput, PaymentMethod } from './orders'
+import type { OrderInput, PaymentMethod, ReceiptType } from './orders'
 import { trustedItems } from './orders'
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -14,6 +14,11 @@ export const parseOrderInput = (body: unknown, paymentMethod: PaymentMethod): Or
   const email = typeof data.email === 'string' ? data.email.trim() : ''
   const address = typeof data.address === 'string' ? data.address.trim() : ''
   const fulfillment = data.fulfillment === 'pickup' ? 'pickup' : data.fulfillment === 'delivery' ? 'delivery' : null
-  if (!items || !customer || !phone || !emailPattern.test(email) || !fulfillment || (fulfillment === 'delivery' && !address)) return null
-  return { customer, phone, email, address, fulfillment, items: items.items, paymentMethod }
+  const receiptType: ReceiptType | null = data.receiptType === 'boleta' || data.receiptType === 'factura' ? data.receiptType : null
+  const dni = typeof data.dni === 'string' ? data.dni.trim() : ''
+  const ruc = typeof data.ruc === 'string' ? data.ruc.trim() : ''
+  if (!items || !customer || !phone || !emailPattern.test(email) || !fulfillment || !receiptType || (fulfillment === 'delivery' && !address)) return null
+  if (receiptType === 'boleta' && dni && !/^\d{8}$/.test(dni)) return null
+  if (receiptType === 'factura' && !/^\d{11}$/.test(ruc)) return null
+  return { customer, phone, email, address, fulfillment, receiptType, ...(receiptType === 'boleta' && dni ? { dni } : {}), ...(receiptType === 'factura' ? { ruc } : {}), items: items.items, paymentMethod }
 }

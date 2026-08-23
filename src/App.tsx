@@ -5,6 +5,7 @@ import './App.css'
 
 type CartItem = { id: string; name: string; price: number; quantity: number; note?: string }
 type SubmittedOrder = {
+  orderId?: string
   customerName: string
   customerPhone: string
   customerEmail: string
@@ -21,7 +22,6 @@ type CulqiChargeResponse = {
   orderId?: string
 }
 const menuCategories = menuData as MenuCategory[]
-const whatsappNumber = '51933622680'
 
 function App() {
   const [activeCategoryId, setActiveCategoryId] = useState(menuCategories[0].id)
@@ -35,6 +35,9 @@ function App() {
   const [selectedProduct, setSelectedProduct] = useState<MenuItem | null>(null)
   const [productNote, setProductNote] = useState('')
   const [customerEmail, setCustomerEmail] = useState('')
+  const [receiptType, setReceiptType] = useState<'boleta' | 'factura'>('boleta')
+  const [dni, setDni] = useState('')
+  const [ruc, setRuc] = useState('')
   const [culqiMessage, setCulqiMessage] = useState('')
   const [isProcessingPayment, setIsProcessingPayment] = useState(false)
   const checkoutFormRef = useRef<HTMLFormElement>(null)
@@ -50,12 +53,23 @@ function App() {
     const form = checkoutFormRef.current
     if (!form || !form.reportValidity()) return null
     const formData = new FormData(form)
+    if (receiptType === 'factura' && !/^\d{11}$/.test(ruc)) {
+      setCulqiMessage('Para Factura ingresa un RUC válido de 11 dígitos.')
+      return null
+    }
+    if (receiptType === 'boleta' && dni && !/^\d{8}$/.test(dni)) {
+      setCulqiMessage('El DNI debe tener exactamente 8 dígitos.')
+      return null
+    }
     return {
       customer: String(formData.get('name')).trim(),
       phone: String(formData.get('phone')).trim(),
       email: customerEmail.trim(),
       address: fulfillment === 'delivery' ? String(formData.get('address')).trim() : '',
       fulfillment,
+      receiptType,
+      ...(receiptType === 'boleta' && dni ? { dni } : {}),
+      ...(receiptType === 'factura' ? { ruc } : {}),
       items: cartItems.map(({ name, quantity, note }) => ({ name, quantity, note })),
     }
   }
@@ -202,27 +216,6 @@ function App() {
     culqi.culqi = () => { void handleCulqiAction(culqi) }
     culqi.open()
   }
-  const whatsappLink = submittedOrder
-    ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
-      [
-        '🐈‍⬛ *NUEVO PEDIDO · THE BLACK CAT*',
-        '',
-        ...submittedOrder.items.flatMap((item) => [
-          '• ' + item.quantity + 'x ' + item.name + ' — S/ ' + (item.price * item.quantity).toFixed(2),
-          ...(item.note ? ['  ↳ Nota: ' + item.note] : []),
-        ]),
-        '',
-        `*Total productos:* S/ ${submittedOrder.subtotal.toFixed(2)}`,
-        `*Entrega:* ${submittedOrder.fulfillment === 'delivery' ? 'Delivery' : 'Recojo en el bar'}`,
-        `*Pago:* ${submittedOrder.paymentMethod}`,
-        '',
-        `*Cliente:* ${submittedOrder.customerName}`,
-        `*Celular:* ${submittedOrder.customerPhone}`,
-        submittedOrder.fulfillment === 'delivery' ? `*Dirección:* ${submittedOrder.address}` : '',
-      ].filter(Boolean).join('\n'),
-    )}`
-    : '#'
-
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -374,9 +367,9 @@ function App() {
               <div className="order-success">
                 <span aria-hidden="true">✦</span><p className="eyebrow">PEDIDO REGISTRADO</p>
                 <h3>¡Gracias por tu pedido!</h3>
-                <p>Revisa el mensaje y envíalo por WhatsApp para que el bar reciba tu pedido.</p>
+                <p>Tu pedido fue recibido por The Black Cat. La tienda fue notificada automáticamente.</p>
+                {submittedOrder?.orderId && <strong>Código de pedido: {submittedOrder.orderId}</strong>}
                 <strong>Total de productos: S/ {submittedOrder?.subtotal.toFixed(2)}</strong>
-                <a className="whatsapp-button" href={whatsappLink} target="_blank" rel="noreferrer">Enviar pedido por WhatsApp</a>
                 <button className="checkout-button" type="button" onClick={() => { setCartItems([]); setIsCheckoutOpen(false) }}>Volver al menú</button>
               </div>
             ) : (
@@ -390,18 +383,20 @@ function App() {
                   const response = await fetch('/.netlify/functions/create-cash-order', {
                     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(orderPayload),
                   })
-                  if (!response.ok) { setCulqiMessage('No fue posible registrar el pedido. Inténtalo nuevamente.'); return }
+                  const result = await response.json() as { orderId?: string }
+                  if (!response.ok || !result.orderId) { setCulqiMessage('No fue posible registrar el pedido. Inténtalo nuevamente.'); return }
+                  setSubmittedOrder({
+                    orderId: result.orderId,
+                    customerName: String(formData.get('name')),
+                    customerPhone: String(formData.get('phone')),
+                    customerEmail: String(formData.get('email')),
+                    fulfillment,
+                    address: fulfillment === 'delivery' ? String(formData.get('address')) : '',
+                    paymentMethod,
+                    items: cartItems,
+                    subtotal,
+                  })
                 } catch { setCulqiMessage('No fue posible registrar el pedido. Inténtalo nuevamente.'); return } finally { setIsProcessingPayment(false) }
-                setSubmittedOrder({
-                  customerName: String(formData.get('name')),
-                  customerPhone: String(formData.get('phone')),
-                  customerEmail: String(formData.get('email')),
-                  fulfillment,
-                  address: fulfillment === 'delivery' ? String(formData.get('address')) : '',
-                  paymentMethod,
-                  items: cartItems,
-                  subtotal,
-                })
                 setIsOrderSubmitted(true)
               }}>
                 <fieldset>
@@ -423,6 +418,22 @@ function App() {
                   <label>Celular<input name="phone" required inputMode="tel" placeholder="999 999 999" autoComplete="tel" /></label>
                   <label>Correo electrónico<input name="email" type="email" required value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)} placeholder="tu@email.com" autoComplete="email" /></label>
                   {fulfillment === 'delivery' && <label>Dirección de delivery<textarea name="address" required placeholder="Calle, número, distrito y referencia" rows={3} /></label>}
+                  <div className="receipt-fields">
+                    <span>Comprobante</span>
+                    <div className="payment-options">
+                      <label className={receiptType === 'boleta' ? 'payment-option active' : 'payment-option'}>
+                        <input type="radio" name="receiptType" checked={receiptType === 'boleta'} onChange={() => { setReceiptType('boleta'); setRuc('') }} /> Boleta
+                      </label>
+                      <label className={receiptType === 'factura' ? 'payment-option active' : 'payment-option'}>
+                        <input type="radio" name="receiptType" checked={receiptType === 'factura'} onChange={() => { setReceiptType('factura'); setDni('') }} /> Factura
+                      </label>
+                    </div>
+                    {receiptType === 'boleta' ? (
+                      <label>DNI (opcional)<input name="dni" inputMode="numeric" maxLength={8} value={dni} onChange={(event) => setDni(event.target.value.replace(/\D/g, '').slice(0, 8))} placeholder="12345678" /></label>
+                    ) : (
+                      <label>RUC<input name="ruc" inputMode="numeric" required maxLength={11} value={ruc} onChange={(event) => setRuc(event.target.value.replace(/\D/g, '').slice(0, 11))} placeholder="20123456789" /></label>
+                    )}
+                  </div>
                 </fieldset>
                 <fieldset>
                   <legend>Método de pago</legend>
