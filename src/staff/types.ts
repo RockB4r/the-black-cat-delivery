@@ -20,6 +20,32 @@ export type Member = {
 }
 
 export type RewardCategory = 'craft_beer' | 'cocktail' | 'burger' | 'sandwich' | 'wings' | 'wrap'
+export type ReceiptType = 'boleta' | 'factura'
+
+export type Consumption = {
+  id: string
+  member_id: string
+  amount: number
+  points_earned: number
+  receipt_type: ReceiptType
+  receipt_series: string
+  receipt_number: string
+  status: 'active' | 'reversed'
+  registered_by: string
+  consumed_at: string
+}
+
+export type ConsumptionAudit = {
+  id?: string
+  consumption_id: string
+  action: 'correction' | 'reversal' | string
+  old_amount: number | null
+  new_amount: number | null
+  points_adjusted: number | null
+  reason: string
+  performed_by: string
+  created_at: string
+}
 
 export type PointMovement = {
   id: string

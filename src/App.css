@@ -36,6 +36,7 @@ footer {
 .staff-section { border-top: 1px solid rgba(255,246,230,.14); padding-top: 24px; }
 .staff-section h2 { font-size: clamp(26px, 4vw, 36px); margin-bottom: 8px; }
 .staff-section > p, .member-summary p, .staff-history p { color: #c9c0b3; line-height: 1.45; }
+.staff-section-title { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
 .staff-form { display: grid; gap: 13px; }
 .staff-form label { margin: 0; }
 .staff-form textarea, .staff-form select { width: 100%; margin-top: 7px; color: #fff7e8; border: 1px solid rgba(255,246,230,.18); border-radius: 4px; background: #2b2825; padding: 12px; font: inherit; }
@@ -44,6 +45,8 @@ footer {
 .staff-or { color: #a89e91; padding-bottom: 12px; font-weight: 700; }
 .staff-primary { min-height: 44px; align-self: end; color: #11100f; border: 0; border-radius: 4px; background: #f7bd3a; padding: 11px 15px; font-weight: 900; }
 .staff-primary:disabled { opacity: .5; cursor: not-allowed; }
+.staff-secondary { min-height: 42px; color: #fff7e8; border: 1px solid rgba(255,246,230,.22); border-radius: 4px; background: transparent; padding: 10px 13px; font-weight: 800; white-space: nowrap; }
+.staff-create-form { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 20px; padding: 20px; border: 1px solid rgba(247,189,58,.26); border-radius: 6px; background: rgba(48,42,32,.55); }.staff-create-form h3, .staff-create-form .staff-checkbox, .staff-create-form .staff-primary { grid-column: 1 / -1; }.staff-create-form small { color: #a89e91; font-weight: 400; }.staff-checkbox { display: flex !important; align-items: center; gap: 9px; color: #d5ccc0; cursor: pointer; }.staff-checkbox input { width: 16px; height: 16px; margin: 0; accent-color: #f7bd3a; }
 .member-summary { display: flex; justify-content: space-between; align-items: end; gap: 20px; }
 .member-summary h2 { margin-bottom: 10px; }
 .points-panel { min-width: 185px; padding: 17px; border: 1px solid rgba(247,189,58,.5); border-radius: 5px; background: #302a20; }
@@ -51,10 +54,13 @@ footer {
 .points-panel span, .points-panel small, .points-panel b { display: block; margin-top: 6px; }
 .points-panel small { color: #d5ccc0; line-height: 1.35; }.points-panel b { color: #f7bd3a; }
 .staff-warning { margin: 18px 0 0; padding: 12px 14px; color: #ffd2c7; border-left: 3px solid #e96f58; background: rgba(233,111,88,.12); }
+.staff-danger { min-height: 42px; color: #fff7e8; border: 1px solid #e96f58; border-radius: 4px; background: rgba(233,111,88,.16); padding: 10px 13px; font-weight: 900; }
 .staff-operation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .staff-operation-grid .staff-section { padding: 22px; border: 1px solid rgba(255,246,230,.14); border-radius: 6px; background: rgba(15,14,13,.32); }
 .staff-preview { margin: 0; color: #c9c0b3; line-height: 1.4; }.staff-preview strong { color: #f7bd3a; }
+.staff-receipt-fields { display: grid; gap: 13px; }.staff-receipt-fields > span { color: #d5ccc0; font-size: 13px; font-weight: 700; }.staff-receipt-options { display: flex; gap: 9px; }.staff-receipt-options label { flex: 1; color: #fff7e8; border: 1px solid rgba(255,246,230,.18); border-radius: 4px; background: #2b2825; padding: 10px; cursor: pointer; }.staff-receipt-options input { width: auto; margin: 0 7px 0 0; accent-color: #f7bd3a; }.consumption-summary { display: grid; gap: 6px; padding: 14px; border-left: 3px solid #f7bd3a; background: rgba(247,189,58,.1); color: #d5ccc0; font-size: 13px; }.consumption-summary span { display: flex; justify-content: space-between; gap: 12px; }.consumption-summary strong { color: #fff7e8; text-align: right; }
 .staff-history ul { list-style: none; padding: 0; margin: 14px 0 0; }.staff-history li { display: grid; grid-template-columns: 135px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 13px 0; border-bottom: 1px solid rgba(255,246,230,.1); }.staff-history time, .staff-history span { color: #a89e91; font-size: 12px; }.staff-history strong, .staff-history span { display: block; }.staff-history b { white-space: nowrap; }.points-positive { color: #82cb7a; }.points-negative { color: #e96f58; }.staff-signout { margin: 0; }
+.staff-consumptions ul { list-style: none; padding: 0; margin: 14px 0 0; }.staff-consumptions li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 13px; padding: 15px 0; border-bottom: 1px solid rgba(255,246,230,.1); }.staff-consumptions li.is-reversed { opacity: .7; }.staff-consumptions time, .staff-consumptions span, .staff-consumptions small { display: block; color: #a89e91; font-size: 12px; margin-bottom: 4px; }.staff-consumptions strong { color: #fff7e8; display: block; }.consumption-actions { display: flex; align-items: start; justify-content: end; gap: 7px; flex-wrap: wrap; }.staff-link { color: #f7bd3a; border: 0; background: transparent; padding: 10px 4px; font-weight: 800; }.audit-list { grid-column: 1 / -1; margin: 0; padding: 11px; border-left: 3px solid #a89e91; background: rgba(255,255,255,.04); color: #c9c0b3; font-size: 12px; line-height: 1.5; }.audit-list p { margin: 0 0 10px; }.audit-list p:last-child { margin-bottom: 0; }.staff-management-form { margin-top: 20px; padding: 22px; border: 1px solid rgba(247,189,58,.45); border-radius: 6px; background: rgba(48,42,32,.55); }.management-actions { display: flex; justify-content: end; gap: 10px; }
 
 .topbar {
   min-height: 80px;
@@ -604,9 +610,12 @@ footer {
   .staff-card { padding: 26px 20px; }
   .staff-actions { grid-template-columns: 1fr; }
   .staff-search-form, .staff-operation-grid { grid-template-columns: 1fr; }
+  .staff-create-form { grid-template-columns: 1fr; }
+  .staff-section-title { align-items: stretch; flex-direction: column; }.staff-secondary { width: 100%; }
   .staff-or { padding: 0; text-align: center; }
   .member-summary { align-items: start; flex-direction: column; }.points-panel { width: 100%; }
   .staff-history li { grid-template-columns: 1fr auto; }.staff-history li time { grid-column: 1 / -1; }
+  .staff-consumptions li { grid-template-columns: 1fr; }.consumption-actions { justify-content: start; }.management-actions { display: grid; grid-template-columns: 1fr; }
   .section-heading { align-items: flex-start; flex-direction: column; gap: 13px; }
   footer { padding: 22px 20px 28px; flex-direction: column; gap: 8px; }
 }
