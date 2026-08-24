@@ -14,22 +14,22 @@
     "id": "sandwiches-wraps",
     "name": "Sandwiches & Wraps",
     "items": [
-      { "name": "Chicken Club", "price": 19 },
-      { "name": "American Way", "price": 16 },
-      { "name": "Fat Cat", "price": 16 },
-      { "name": "Chicken Quesadilla", "price": 20 }
+      { "name": "Chicken Club", "price": 19, "image": "/productos/Chicken Club.jpg" },
+      { "name": "American Way", "price": 16, "image": "/productos/AmericanWay.jpg" },
+      { "name": "Fat Cat", "price": 16, "image": "/productos/FatCat.jpg" },
+      { "name": "Chicken Quesadilla", "price": 20, "image": "/productos/Quesadilla.jpeg" }
     ]
   },
   {
     "id": "piqueos",
     "name": "Piqueos",
     "items": [
-      { "name": "Wings", "price": 25 },
-      { "name": "Papas Bravas", "price": 16 },
-      { "name": "Papas & Cheddar", "price": 16 },
-      { "name": "Chori-Bravas", "price": 18 },
-      { "name": "Nachos", "price": 15 },
-      { "name": "Tequeños", "price": 18 }
+      { "name": "Wings", "price": 25, "image": "/productos/Chicken wings.png" },
+      { "name": "Papas Bravas", "price": 16, "image": "/productos/Papas Bravas.png" },
+      { "name": "Papas & Cheddar", "price": 16, "image": "/productos/Papas&Cheddar.png" },
+      { "name": "Chori-Bravas", "price": 18, "image": "/productos/Chori-Bravas.png" },
+      { "name": "Nachos", "price": 15, "image": "/productos/Nachos.png" },
+      { "name": "Tequeños", "price": 18, "image": "/productos/Tequeños.png" }
     ]
   },
   {
