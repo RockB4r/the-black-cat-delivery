@@ -14,7 +14,7 @@
     "id": "sandwiches-wraps",
     "name": "Sandwiches & Wraps",
     "items": [
-      { "name": "Chicken Club", "price": 19, "image": "/productos/Chicken Club.jpg", "ingredients": "Pan de molde semi tostado, Lechuga + Tomate, Pechuga macerada en IPA a la plancha, Cheddar." },
+      { "name": "Chicken Club", "price": 19, "image": "/productos/Chicken Club.jpg", "ingredients": "Pan de molde semi tostado, Lechuga + Tomate, Pechuga macerada en IPA a la plancha, Tocino Crispy, Cheddar." },
       { "name": "American Way", "price": 16, "image": "/productos/AmericanWay.jpg", "ingredients": "Pan de molde semi tostado, Tocino Crispy, Cheddar o Edam, Huevo." },
       { "name": "Fat Cat", "price": 16, "image": "/productos/FatCat.jpg", "ingredients": "Tortilla artesanal de trigo, Pechuga macerada en IPA a la plancha, Tocino Crispy, Salsa Chipotle, Edam." },
       { "name": "Chicken Quesadilla", "price": 20, "image": "/productos/Quesadilla.jpeg", "ingredients": "Tortilla artesanal de trigo, Mozzarella, Aceitunas verdes, Pechuga macerada en IPA a la plancha." },
