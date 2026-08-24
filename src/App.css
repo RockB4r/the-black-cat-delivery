@@ -381,6 +381,9 @@ h2 { font-size: clamp(34px, 5vw, 52px); letter-spacing: -0.045em; margin-bottom:
   font-weight: 800;
   letter-spacing: 0.03em;
 }
+.product-style-field { display: block; margin: 0 0 21px; color: #f7bd3a; font-size: 13px; font-weight: 800; letter-spacing: 0.03em; }
+.product-style-field select { width: 100%; margin-top: 8px; color: #fff7e8; border: 1px solid rgba(247,189,58,.6); border-radius: 4px; background: #2b2825; padding: 12px; font: inherit; font-size: 15px; }
+.modal-add-button:disabled { cursor: not-allowed; opacity: .45; }
 .product-note-field textarea {
   display: block;
   width: 100%;
@@ -456,6 +459,7 @@ h2 { font-size: clamp(34px, 5vw, 52px); letter-spacing: -0.045em; margin-bottom:
 .cart-item h3 { font-size: 22px; margin-bottom: 5px; line-height: 1; }
 .cart-item p { color: #aca295; margin-bottom: 0; font-size: 13px; }
 .cart-item .cart-item-note { color: #f7bd3a; margin: 0 0 5px; font-size: 12px; line-height: 1.35; }
+.cart-item .cart-item-style { color: #f7bd3a; margin: 0 0 5px; font-size: 13px; font-weight: 800; }
 .cart-item-actions { display: flex; align-items: end; flex-direction: column; gap: 12px; }
 .remove-button { color: #e96f58; border: 0; background: none; font-size: 12px; padding: 0; }
 .quantity-control {
