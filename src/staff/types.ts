@@ -8,7 +8,9 @@ export type StaffProfile = {
 
 export type Member = {
   id: string
-  dni: string
+  document_type: 'DNI' | 'CE' | null
+  document_number: string | null
+  dni?: string | null
   full_name: string
   phone: string | null
   email: string | null
