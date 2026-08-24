@@ -43,6 +43,7 @@ function App() {
   const [isProcessingPayment, setIsProcessingPayment] = useState(false)
   const checkoutFormRef = useRef<HTMLFormElement>(null)
   const activeCategory = menuCategories.find(({ id }) => id === activeCategoryId) ?? menuCategories[0]
+  const isCraftBeerCategory = activeCategory.id === 'cervezas-artesanales'
   const itemCount = cartItems.reduce((total, item) => total + item.quantity, 0)
   const subtotal = useMemo(() => cartItems.reduce((total, item) => total + item.price * item.quantity, 0), [cartItems])
   const hasValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim())
@@ -293,10 +294,10 @@ function App() {
               <h2 id="product-modal-title">{selectedProduct.name}</h2>
               <p className="modal-price">{selectedProduct.styles ? `Desde S/ ${Math.min(...selectedProduct.styles.map((style) => style.price)).toFixed(2)}` : `S/ ${selectedProduct.price.toFixed(2)}`}</p>
               {selectedProduct.styles && <label className="product-style-field"><span>Escoge tu estilo</span><select value={selectedStyle} onChange={(event) => setSelectedStyle(event.target.value)} required aria-required="true"><option value="" disabled>Selecciona un estilo</option>{selectedProduct.styles.map((style) => <option key={style.name} value={style.name}>{style.name} · S/ {style.price.toFixed(2)}</option>)}</select></label>}
-              <div className="ingredients">
+              {!isCraftBeerCategory && <div className="ingredients">
                 <h3>Ingredientes</h3>
                 <p>{selectedProduct.ingredients ?? 'Ingredientes por confirmar.'}</p>
-              </div>
+              </div>}
               <label className="product-note-field">
                 <span>Indicación para cocina</span>
                 <textarea
