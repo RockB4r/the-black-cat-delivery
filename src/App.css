@@ -601,6 +601,15 @@ footer {
 .legal-content p { margin: 0; font-size: 15px; line-height: 1.65; }
 .legal-content a { color: #f7bd3a; }
 
+.kitchen-page { min-height: 100svh; padding: 32px; color: #fff7e8; background: rgba(17, 16, 15, .9); }
+.kitchen-login-page { display: grid; place-items: center; padding: 24px; }
+.kitchen-login-card { width: min(100%, 430px); padding: 32px; border: 1px solid rgba(247,189,58,.36); border-radius: 8px; background: rgba(31,29,26,.94); box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+.kitchen-login-card h1, .kitchen-header h1 { margin: 7px 0; font-family: var(--heading); font-size: clamp(38px, 5vw, 58px); line-height: 1; }
+.kitchen-login-card > p { color: #d5ccc0; }.kitchen-login-card form { display: grid; gap: 16px; margin-top: 28px; }.kitchen-login-card label { display: grid; gap: 8px; color: #d5ccc0; font-weight: 800; }.kitchen-login-card input { color: #fff7e8; border: 1px solid rgba(255,246,230,.2); border-radius: 4px; background: #22201e; padding: 13px; font: inherit; }
+.kitchen-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; max-width: 1500px; margin: 0 auto 30px; }.kitchen-header p { margin: 0; color: #d5ccc0; }.kitchen-header-actions { display: flex; align-items: center; gap: 14px; }.sound-toggle { display: flex; align-items: center; gap: 8px; color: #d5ccc0; font-weight: 800; }.sound-toggle input { accent-color: #f7bd3a; }
+.kitchen-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; max-width: 1500px; margin: 0 auto; }.kitchen-column, .kitchen-dispatch { min-width: 0; padding: 16px; border: 1px solid rgba(255,246,230,.13); border-radius: 7px; background: rgba(30,28,25,.77); }.kitchen-column h2, .kitchen-dispatch h2 { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 15px; font-family: var(--heading); font-size: 28px; }.kitchen-column h2 span { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 50%; color: #161411; background: #f7bd3a; font-family: sans-serif; font-size: 14px; }.kitchen-card-list { display: grid; gap: 12px; }
+.kitchen-order-card { display: grid; gap: 12px; padding: 17px; border-left: 3px solid #f7bd3a; border-radius: 4px; background: #211f1c; }.kitchen-order-card p { margin: 0; color: #d5ccc0; line-height: 1.4; }.kitchen-order-heading { display: flex; justify-content: space-between; gap: 8px; color: #fff7e8; }.kitchen-order-heading strong { font-size: 17px; }.kitchen-order-heading time { color: #f7bd3a; font-weight: 800; white-space: nowrap; }.kitchen-order-type { color: #f7bd3a !important; font-size: 13px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }.kitchen-address, .kitchen-general-note { padding: 9px; border-radius: 3px; background: rgba(255,255,255,.06); font-size: 14px; }.kitchen-items { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }.kitchen-items li { display: grid; gap: 3px; color: #fff7e8; font-weight: 700; }.kitchen-items small { color: #f7bd3a; font-size: 13px; font-weight: 700; }.kitchen-order-card .primary-button { width: 100%; margin-top: 2px; }.kitchen-empty { margin: 8px 0; color: #a89e91; font-size: 14px; }.kitchen-dispatch { display: grid; gap: 12px; max-width: 1500px; margin: 18px auto 0; }.kitchen-dispatch .kitchen-order-card { max-width: 460px; }.kitchen-message { max-width: 1500px; margin: 0 auto 18px; padding: 12px; border-left: 3px solid #e96f58; background: rgba(233,111,88,.12); }.kitchen-loading { margin: 0; padding-top: 30vh; color: #d5ccc0; text-align: center; }
+
 @media (max-width: 680px) {
   body {
     background-color: #11100f;
@@ -653,4 +662,5 @@ footer {
   .footer-links { justify-content: flex-start; gap: 10px 14px; }
   .legal-content { width: min(100% - 36px, 800px); padding: 58px 0; }
   .complaints-form-content { width: min(100% - 32px, 860px); padding: 52px 0; }.complaints-grid { grid-template-columns: 1fr; }.complaint-type-options { display: grid; grid-template-columns: 1fr; }
+  .kitchen-page { padding: 22px 14px; }.kitchen-header { align-items: flex-start; flex-direction: column; margin-bottom: 22px; }.kitchen-header-actions { width: 100%; justify-content: space-between; }.kitchen-board { grid-template-columns: 1fr; }.kitchen-column h2, .kitchen-dispatch h2 { font-size: 25px; }
 }

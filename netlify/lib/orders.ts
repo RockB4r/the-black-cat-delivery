@@ -1,6 +1,7 @@
 import { getStore } from '@netlify/blobs'
 import menuData from '../../src/data/menu.json'
 import type { MenuCategory } from '../../src/data/types'
+import { persistKitchenOrder, syncKitchenPaymentStatus } from './kitchen'
 
 export type PaymentMethod = 'cash' | 'card' | 'wallet'
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'expired'
@@ -68,11 +69,12 @@ export const createOrder = async (input: OrderInput, paymentStatus: PaymentStatu
     whatsappNotificationStatus: 'pending',
   }
   await orders().setJSON(order.orderId, order, { onlyIfNew: true })
+  await persistKitchenOrder(order)
   return order
 }
 
 export const getOrder = async (orderId: string) => orders().getJSON<StoreOrder>(orderId, { consistency: 'strong' })
-export const saveOrder = async (order: StoreOrder) => orders().setJSON(order.orderId, order)
+export const saveOrder = async (order: StoreOrder) => { await orders().setJSON(order.orderId, order); await syncKitchenPaymentStatus(order) }
 
 export const linkCulqiOrder = async (culqiOrderId: string, orderId: string) => {
   await getStore({ name: 'the-black-cat-culqi-order-links', consistency: 'strong' }).set(culqiOrderId, orderId, { onlyIfNew: true })
