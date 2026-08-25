@@ -27,7 +27,7 @@
     "items": [
       { "name": "Wings", "price": 25, "image": "/productos/Chicken wings.png", "ingredients": "8 alas crujientes, acompañadas de papas fritas y salsa a elección: BBQ, Buffalo, Acevichada o Maracuyá.", "sauces": [{ "name": "BBQ", "price": 25 }, { "name": "Buffalo", "price": 25 }, { "name": "Acevichada", "price": 25 }, { "name": "Maracuyá", "price": 25 }] },
       { "name": "Papas Bravas", "price": 16, "image": "/productos/Papas Bravas.png", "ingredients": "Papas fritas crocantes, cabanossi en trozos y salsa chipotle." },
-      { "name": "Papas & Cheddar", "price": 16, "image": "/productos/Papas-Cheddar.png", "ingredients": "Papas fritas cubiertas con cheddar fundido y cabanossi." },
+      { "name": "Papas & Cheddar", "price": 16, "image": "/productos/PapasCheddar.png", "ingredients": "Papas fritas cubiertas con cheddar fundido y cabanossi." },
       { "name": "Chori-Bravas", "price": 18, "image": "/productos/Chori-Bravas.png", "ingredients": "Papas fritas, chorizo estilo alemán en rodajas y salsa chipotle." },
       { "name": "Nachos", "price": 15, "image": "/productos/Nachos.png", "ingredients": "Nachos crocantes con cheddar fundido y jalapeños." },
       { "name": "Tequeños", "price": 18, "image": "/productos/Tequeños.png", "ingredients": "Tequeños rellenos de queso, acompañados de salsa de ajo." }
