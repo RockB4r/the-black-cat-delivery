@@ -573,6 +573,17 @@ footer {
   letter-spacing: 0.08em;
 }
 
+.complaints-book-link { display: inline-flex; align-items: center; justify-content: center; gap: 7px; color: #d5ccc0; text-decoration: none; font-weight: 800; }
+.complaints-book-link:hover { color: #f7bd3a; }
+.complaints-book-link svg, .complaints-book-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.complaints-book-page { display: flex; min-height: 100svh; flex-direction: column; }
+.complaints-book-content { width: min(100% - 40px, 720px); margin: auto; padding: 72px 0; text-align: center; }
+.complaints-book-content h1 { margin: 18px 0 14px; color: #fff7e8; font-size: clamp(42px, 8vw, 76px); }
+.complaints-book-content > p:not(.eyebrow) { max-width: 460px; margin: 0 auto; color: #d5ccc0; font-size: 16px; line-height: 1.55; }
+.complaints-book-icon { display: grid; width: 58px; height: 58px; place-items: center; margin: 0 auto; border: 1px solid rgba(247,189,58,.55); border-radius: 50%; color: #f7bd3a; background: rgba(247,189,58,.1); }
+.complaints-book-icon svg { width: 28px; height: 28px; }
+.complaints-book-back { display: inline-block; margin-top: 30px; text-decoration: none; }
+
 @media (max-width: 680px) {
   body {
     background-color: #11100f;
