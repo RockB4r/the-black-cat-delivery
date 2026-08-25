@@ -26,6 +26,16 @@ const playAlert = () => {
     })
     window.setTimeout(() => void context.close(), 700)
   } catch { /* The display continues when a browser blocks audio. */ }
+
+  window.setTimeout(() => {
+    if (!('speechSynthesis' in window)) return
+    const announcement = new SpeechSynthesisUtterance('Tienes un nuevo pedido de Web')
+    announcement.lang = 'es-PE'
+    announcement.rate = 1
+    announcement.pitch = 1
+    window.speechSynthesis.cancel()
+    window.speechSynthesis.speak(announcement)
+  }, 480)
 }
 
 export function KitchenDisplay() {
