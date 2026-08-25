@@ -37,16 +37,16 @@
     "id": "cervezas-artesanales",
     "name": "Cervezas Artesanales",
     "items": [
-      { "name": "Sierra Andina", "price": 16, "styles": [{ "name": "Imperial Ale", "price": 18 }, { "name": "Pale Ale", "price": 16 }, { "name": "Amber Ale", "price": 16 }, { "name": "IPA", "price": 18 }] },
-      { "name": "Invictus", "price": 16, "styles": [{ "name": "Ambrée Ale", "price": 16 }, { "name": "Double IPA", "price": 16 }, { "name": "Dubbel", "price": 16 }, { "name": "Coffee Stout", "price": 16 }] },
-      { "name": "Craftsman", "price": 16, "styles": [{ "name": "American Red", "price": 16 }] },
+      { "name": "Sierra Andina", "price": 16, "image": "/productos/Sierra-Andina.png", "styles": [{ "name": "Imperial Ale", "price": 18 }, { "name": "Pale Ale", "price": 16 }, { "name": "Amber Ale", "price": 16 }, { "name": "IPA", "price": 18 }] },
+      { "name": "Invictus", "price": 16, "image": "/productos/Invictus.jpg", "styles": [{ "name": "Ambrée Ale", "price": 16 }, { "name": "Double IPA", "price": 16 }, { "name": "Dubbel", "price": 16 }, { "name": "Coffee Stout", "price": 16 }] },
+      { "name": "Craftsman", "price": 16, "image": "/productos/Craftsman.jpeg", "styles": [{ "name": "American Red", "price": 16 }] },
       { "name": "Dörcher Bier", "price": 16, "styles": [{ "name": "Coca Lager", "price": 16 }, { "name": "Dunkel", "price": 16 }, { "name": "Cranberry Lager", "price": 16 }] },
       { "name": "Zátara", "price": 16, "styles": [{ "name": "British Strong Ale", "price": 16 }, { "name": "Sandía Session IPA", "price": 16 }] },
       { "name": "Caños del Santero", "price": 18, "styles": [{ "name": "Quinua Red Ale", "price": 18 }, { "name": "Peach American Wheat", "price": 18 }, { "name": "Orange American Wheat", "price": 18 }] },
-      { "name": "Cervecería del Valle Sagrado", "price": 18, "styles": [{ "name": "Extra Pale Ale", "price": 18 }, { "name": "Doble IPA", "price": 18 }, { "name": "IPA", "price": 18 }, { "name": "Ayrampo Red Ale", "price": 18 }] },
-      { "name": "Almirante", "price": 22, "styles": [{ "name": "IPA", "price": 22 }, { "name": "Hazy IPA", "price": 24 }] },
+      { "name": "Cervecería del Valle Sagrado", "price": 18, "image": "/productos/Cerveceria-de-Valle-Sagrado.png", "styles": [{ "name": "Extra Pale Ale", "price": 18 }, { "name": "Doble IPA", "price": 18 }, { "name": "IPA", "price": 18 }, { "name": "Ayrampo Red Ale", "price": 18 }] },
+      { "name": "Almirante", "price": 22, "image": "/productos/Almirante.jpg", "styles": [{ "name": "IPA", "price": 22 }, { "name": "Hazy IPA", "price": 24 }] },
       { "name": "7 Vidas", "price": 18, "styles": [{ "name": "Quadrupel", "price": 18 }, { "name": "Irish Stout", "price": 18 }, { "name": "Quinua Wheat", "price": 18 }, { "name": "Oxapampa Honey", "price": 18 }, { "name": "Kiwicha Imperial Red Ale", "price": 18 }, { "name": "Rose Brut", "price": 18 }] },
-      { "name": "Greenga", "price": 16, "styles": [{ "name": "Mandarina American Wheat", "price": 16 }, { "name": "New England IPA", "price": 16 }] },
+      { "name": "Greenga", "price": 16, "image": "/productos/Greenga.jpg", "styles": [{ "name": "Mandarina American Wheat", "price": 16 }, { "name": "New England IPA", "price": 16 }] },
       { "name": "Jack Vled", "price": 16, "styles": [{ "name": "Pale Ale", "price": 16 }] }
     ]
   }
