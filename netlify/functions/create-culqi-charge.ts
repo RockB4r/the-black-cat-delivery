@@ -1,11 +1,13 @@
 import { notifyOrder } from '../lib/notifications'
 import { createOrder, trustedItems } from '../lib/orders'
 import { json, parseOrderInput } from '../lib/request'
+import { isOnlineOrderingOpen } from '../lib/online-ordering'
 
 export default async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') {
     return json(405, { approved: false, message: 'Método no permitido.' })
   }
+  if (!isOnlineOrderingOpen()) return json(403, { approved: false, message: 'Cocina Cerrada. Nuestro horario de atención online es: 6:00 PM - 1:00 AM.' })
 
   const body: unknown = await request.json().catch(() => null)
   const data = body as Record<string, unknown> | null

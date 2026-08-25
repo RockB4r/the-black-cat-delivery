@@ -1,6 +1,7 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import menuData from './data/menu.json'
 import type { MenuCategory, MenuItem } from './data/types'
+import { isOnlineOrderingOpen, onlineOrderingHours } from './lib/onlineOrdering'
 import './App.css'
 
 type CartItem = { id: string; name: string; price: number; quantity: number; note?: string; style?: string; sauce?: string }
@@ -42,6 +43,7 @@ function App() {
   const [ruc, setRuc] = useState('')
   const [culqiMessage, setCulqiMessage] = useState('')
   const [isProcessingPayment, setIsProcessingPayment] = useState(false)
+  const [orderingOpen, setOrderingOpen] = useState(() => isOnlineOrderingOpen())
   const checkoutFormRef = useRef<HTMLFormElement>(null)
   const activeCategory = menuCategories.find(({ id }) => id === activeCategoryId) ?? menuCategories[0]
   const isCraftBeerCategory = activeCategory.id === 'cervezas-artesanales'
@@ -52,7 +54,17 @@ function App() {
   const isCashPayment = paymentMethod === 'Efectivo'
   const culqiPublicKey = import.meta.env.VITE_CULQI_PUBLIC_KEY
 
+  useEffect(() => {
+    const refresh = () => setOrderingOpen(isOnlineOrderingOpen())
+    const timer = window.setInterval(refresh, 30_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
   const getOrderPayload = () => {
+    if (!orderingOpen) {
+      setCulqiMessage(`Cocina Cerrada. Nuestro horario de atención online es: ${onlineOrderingHours.display}.`)
+      return null
+    }
     const form = checkoutFormRef.current
     if (!form || !form.reportValidity()) return null
     const formData = new FormData(form)
@@ -237,6 +249,7 @@ function App() {
         <p className="eyebrow">ROCK, BURGERS &amp; COLD BEER</p>
         <h1>El Templo del Rock<br />y del espíritu Rebelde.</h1>
         <p className="hero-copy">Pide tus favoritos para delivery o recógelos en el bar.</p>
+        {!orderingOpen && <p className="ordering-closed" role="status"><strong>Cocina Cerrada</strong><span>Nuestro horario de atención online es: {onlineOrderingHours.display}</span></p>}
         <a className="primary-action" href="#menu">Ver el menú <span aria-hidden="true">↓</span></a>
         <div className="service-pills"><span>🛵 Delivery</span><span>✦ Recojo en el bar</span></div>
       </section>
@@ -392,8 +405,8 @@ function App() {
                   const response = await fetch('/.netlify/functions/create-cash-order', {
                     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(orderPayload),
                   })
-                  const result = await response.json() as { orderId?: string }
-                  if (!response.ok || !result.orderId) { setCulqiMessage('No fue posible registrar el pedido. Inténtalo nuevamente.'); return }
+                  const result = await response.json() as { orderId?: string; message?: string }
+                  if (!response.ok || !result.orderId) { setCulqiMessage(result.message ?? 'No fue posible registrar el pedido. Inténtalo nuevamente.'); return }
                   setSubmittedOrder({
                     orderId: result.orderId,
                     customerName: String(formData.get('name')),
@@ -457,12 +470,13 @@ function App() {
                 </fieldset>
                 <div className="checkout-total"><span>Productos</span><strong>S/ {subtotal.toFixed(2)}</strong></div>
                 <p className="checkout-disclaimer">El costo de delivery se confirmará según la zona. No se realizará ningún cobro en esta etapa.</p>
-                {!isCashPayment && <button className="culqi-button" type="button" disabled={!canPayWithCulqi || isProcessingPayment} onClick={() => { void openCulqiCheckout() }}>
+                {!orderingOpen && <p className="ordering-closed checkout-closed" role="status"><strong>Cocina Cerrada</strong><span>Nuestro horario de atención online es: {onlineOrderingHours.display}</span></p>}
+                {!isCashPayment && <button className="culqi-button" type="button" disabled={!orderingOpen || !canPayWithCulqi || isProcessingPayment} onClick={() => { void openCulqiCheckout() }}>
                   {isProcessingPayment ? 'Procesando pago...' : 'Pagar con Culqi'}
                 </button>}
                 {!hasValidEmail && <p className="culqi-help">Ingresa un correo electrónico válido para pagar con Culqi.</p>}
                 {culqiMessage && <p className="culqi-message" role="status">{culqiMessage}</p>}
-                {isCashPayment && <button className="checkout-button" type="submit">Registrar pedido</button>}
+                {isCashPayment && <button className="checkout-button" type="submit" disabled={!orderingOpen || isProcessingPayment}>{isProcessingPayment ? 'Registrando pedido...' : 'Registrar pedido'}</button>}
                 <button className="back-button" type="button" onClick={() => { setIsCheckoutOpen(false); setIsCartOpen(true) }}>← Volver al carrito</button>
               </form>
             )}

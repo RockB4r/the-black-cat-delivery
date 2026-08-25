@@ -99,6 +99,29 @@ export const sendOrderWhatsAppNotification = async (order: StoreOrder): Promise<
   }
 }
 
+export const sendOrderRejectionEmail = async ({ orderId, customer, email, reason, comment }: { orderId: string; customer: string; email: string; reason: string; comment: string }): Promise<NotificationStatus> => {
+  try {
+    const apiKey = process.env.RESEND_API_KEY
+    const from = process.env.ORDER_NOTIFICATION_FROM_EMAIL
+    if (!apiKey || !from) throw new Error('Email notification environment is incomplete.')
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        from,
+        to: [email],
+        subject: 'Pedido no procesado - The Black Cat',
+        text: ['Hola ' + customer, '', `Lamentamos informarte que no podemos procesar tu pedido #${orderId}.`, '', 'Motivo:', reason, '', 'Comentario:', comment || 'No se agregó un comentario.', '', 'Gracias por tu comprensión.'].join('\n'),
+      }),
+    })
+    if (!response.ok) throw new Error(`Resend returned ${response.status}.`)
+    return 'sent'
+  } catch (error) {
+    console.error(`Rejection email notification failed for ${orderId}:`, error)
+    return 'failed'
+  }
+}
+
 export const notifyOrder = async (order: StoreOrder) => {
   const emailNotificationStatus = await sendOrderEmailNotification(order)
   const refreshedOrder = { ...order, emailNotificationStatus }
