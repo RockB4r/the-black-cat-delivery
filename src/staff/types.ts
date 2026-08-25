@@ -1,6 +1,7 @@
 export type StaffRole = 'staff' | 'manager' | 'admin'
 
 export type StaffProfile = {
+  user_id: string
   display_name: string
   role: StaffRole
   active: boolean

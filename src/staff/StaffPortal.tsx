@@ -12,7 +12,7 @@ export function StaffPortal() {
   const [message, setMessage] = useState('')
 
   const loadProfile = async (user: User) => {
-    const { data, error } = await supabase.from('staff_profiles').select('display_name, role, active').eq('user_id', user.id).maybeSingle<StaffProfile>()
+    const { data, error } = await supabase.from('staff_profiles').select('user_id, display_name, role, active').eq('user_id', user.id).maybeSingle<StaffProfile>()
     if (error || !data) { await supabase.auth.signOut(); setMessage('No tienes acceso al portal de staff.'); setProfile(null); setUser(null); return }
     if (!data.active) { await supabase.auth.signOut(); setMessage('Usuario desactivado.'); setProfile(null); setUser(null); return }
     setProfile(data)
