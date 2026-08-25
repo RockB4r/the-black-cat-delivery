@@ -320,7 +320,7 @@ function App() {
         </div>
       )}
 
-      <footer><span>THE BLACK CAT · ROCK BAR</span><a className="complaints-book-link" href="/libro-de-reclamaciones"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.75A2.75 2.75 0 0 1 7.75 2H20v16H7.75A2.75 2.75 0 0 0 5 20.75m0-16v16m0-16A2.75 2.75 0 0 1 7.75 2H20M9 6h7m-7 4h7m-7 4h4" /></svg><span>Libro de Reclamaciones</span></a><span>Delivery &amp; recojo</span></footer>
+      <footer><span>THE BLACK CAT · ROCK BAR</span><div className="footer-links"><a className="complaints-book-link" href="/libro-de-reclamaciones"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.75A2.75 2.75 0 0 1 7.75 2H20v16H7.75A2.75 2.75 0 0 0 5 20.75m0-16v16m0-16A2.75 2.75 0 0 1 7.75 2H20M9 6h7m-7 4h7m-7 4h4" /></svg><span>Libro de Reclamaciones</span></a><a href="/terminos-y-condiciones">Términos y Condiciones</a><a href="/politica-de-privacidad">Política de Privacidad</a></div><span>Delivery &amp; recojo</span></footer>
 
       {isCartOpen && (
         <div className="cart-layer" role="presentation" onClick={() => setIsCartOpen(false)}>

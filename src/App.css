@@ -583,6 +583,17 @@ footer {
 .complaints-book-icon { display: grid; width: 58px; height: 58px; place-items: center; margin: 0 auto; border: 1px solid rgba(247,189,58,.55); border-radius: 50%; color: #f7bd3a; background: rgba(247,189,58,.1); }
 .complaints-book-icon svg { width: 28px; height: 28px; }
 .complaints-book-back { display: inline-block; margin-top: 30px; text-decoration: none; }
+.footer-links { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; }
+.footer-links a { color: #d5ccc0; text-decoration: none; font-weight: 800; }
+.footer-links a:hover { color: #f7bd3a; }
+.legal-page { display: flex; min-height: 100svh; flex-direction: column; }
+.legal-content { width: min(100% - 40px, 800px); margin: 0 auto; padding: 74px 0; color: #d5ccc0; }
+.legal-content h1 { margin: 12px 0 8px; color: #fff7e8; font-size: clamp(40px, 7vw, 68px); line-height: .95; }
+.legal-subtitle { margin: 0 0 46px; color: #f7bd3a; font-size: 17px; font-weight: 800; }
+.legal-content section { padding: 24px 0; border-top: 1px solid rgba(255,246,230,.14); }
+.legal-content h2 { margin: 0 0 10px; color: #fff7e8; font-size: clamp(24px, 4vw, 32px); }
+.legal-content p { margin: 0; font-size: 15px; line-height: 1.65; }
+.legal-content a { color: #f7bd3a; }
 
 @media (max-width: 680px) {
   body {
@@ -632,5 +643,7 @@ footer {
   .staff-history li { grid-template-columns: 1fr auto; }.staff-history li time { grid-column: 1 / -1; }
   .staff-consumptions li { grid-template-columns: 1fr; }.consumption-actions { justify-content: start; }.management-actions { display: grid; grid-template-columns: 1fr; }
   .section-heading { align-items: flex-start; flex-direction: column; gap: 13px; }
-  footer { padding: 22px 20px 28px; flex-direction: column; gap: 8px; }
+  footer { padding: 22px 20px 28px; flex-direction: column; gap: 12px; }
+  .footer-links { justify-content: flex-start; gap: 10px 14px; }
+  .legal-content { width: min(100% - 36px, 800px); padding: 58px 0; }
 }
