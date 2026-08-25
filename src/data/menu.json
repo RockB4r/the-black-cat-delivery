@@ -47,7 +47,7 @@
       { "name": "Almirante", "price": 22, "image": "/productos/Almirante.jpg", "styles": [{ "name": "IPA", "price": 22 }, { "name": "Hazy IPA", "price": 24 }] },
       { "name": "7 Vidas", "price": 18, "image": "/productos/7 Vidas.png", "styles": [{ "name": "Quadrupel", "price": 18 }, { "name": "Irish Stout", "price": 18 }, { "name": "Quinua Wheat", "price": 18 }, { "name": "Oxapampa Honey", "price": 18 }, { "name": "Kiwicha Imperial Red Ale", "price": 18 }, { "name": "Rose Brut", "price": 18 }] },
       { "name": "Greenga", "price": 16, "image": "/productos/Greenga.jpg", "styles": [{ "name": "Mandarina American Wheat", "price": 16 }, { "name": "New England IPA", "price": 16 }] },
-      { "name": "Jack Vled", "price": 16, "styles": [{ "name": "Pale Ale", "price": 16 }] }
+      { "name": "Jack Vled", "price": 16, "image": "/productos/Jack-Vled.png", "styles": [{ "name": "Pale Ale", "price": 16 }] }
     ]
   }
 ]
