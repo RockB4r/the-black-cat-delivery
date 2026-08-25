@@ -9,6 +9,7 @@ export type MenuItem = {
   image?: string
   ingredients?: string
   styles?: ProductStyle[]
+  sauces?: ProductStyle[]
 }
 
 export type MenuCategory = {

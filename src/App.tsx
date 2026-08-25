@@ -3,7 +3,7 @@ import menuData from './data/menu.json'
 import type { MenuCategory, MenuItem } from './data/types'
 import './App.css'
 
-type CartItem = { id: string; name: string; price: number; quantity: number; note?: string; style?: string }
+type CartItem = { id: string; name: string; price: number; quantity: number; note?: string; style?: string; sauce?: string }
 type SubmittedOrder = {
   orderId?: string
   customerName: string
@@ -35,6 +35,7 @@ function App() {
   const [selectedProduct, setSelectedProduct] = useState<MenuItem | null>(null)
   const [productNote, setProductNote] = useState('')
   const [selectedStyle, setSelectedStyle] = useState('')
+  const [selectedSauce, setSelectedSauce] = useState('')
   const [customerEmail, setCustomerEmail] = useState('')
   const [receiptType, setReceiptType] = useState<'boleta' | 'factura'>('boleta')
   const [dni, setDni] = useState('')
@@ -72,7 +73,7 @@ function App() {
       receiptType,
       ...(receiptType === 'boleta' && dni ? { dni } : {}),
       ...(receiptType === 'factura' ? { ruc } : {}),
-      items: cartItems.map(({ name, quantity, note, style }) => ({ name, quantity, note, style })),
+      items: cartItems.map(({ name, quantity, note, style, sauce }) => ({ name, quantity, note, style, sauce })),
     }
   }
 
@@ -80,16 +81,17 @@ function App() {
     setSelectedProduct(item)
     setProductNote('')
     setSelectedStyle(item.styles?.length === 1 ? item.styles[0].name : '')
+    setSelectedSauce(item.sauces?.length === 1 ? item.sauces[0].name : '')
   }
 
-  const addToCart = (item: { name: string; price: number }, note = '', style = '') => {
+  const addToCart = (item: { name: string; price: number }, note = '', style = '', sauce = '') => {
     const trimmedNote = note.trim()
-    const id = [activeCategory.id, item.name, style, trimmedNote].join('-')
+    const id = [activeCategory.id, item.name, style, sauce, trimmedNote].join('-')
     setCartItems((current) => {
       const existing = current.find((cartItem) => cartItem.id === id)
       return existing
         ? current.map((cartItem) => cartItem.id === id ? { ...cartItem, quantity: cartItem.quantity + 1 } : cartItem)
-        : [...current, { ...item, id, style: style || undefined, note: trimmedNote || undefined, quantity: 1 }]
+        : [...current, { ...item, id, style: style || undefined, sauce: sauce || undefined, note: trimmedNote || undefined, quantity: 1 }]
     })
     setIsCartOpen(true)
   }
@@ -273,7 +275,7 @@ function App() {
               <h3>{item.name}</h3>
               <div className="product-footer">
                 <p className="price">{item.styles ? `Desde S/ ${Math.min(...item.styles.map((style) => style.price)).toFixed(2)}` : `S/ ${item.price.toFixed(2)}`}</p>
-                <button className="add-button" type="button" onClick={(event) => { event.stopPropagation(); item.styles ? openProductModal(item) : addToCart(item) }}>{item.styles ? 'Escoger' : 'Añadir'} <span aria-hidden="true">＋</span></button>
+                <button className="add-button" type="button" onClick={(event) => { event.stopPropagation(); item.styles || item.sauces ? openProductModal(item) : addToCart(item) }}>{item.styles || item.sauces ? 'Escoger' : 'Añadir'} <span aria-hidden="true">＋</span></button>
               </div>
             </article>
           ))}
@@ -294,6 +296,7 @@ function App() {
               <h2 id="product-modal-title">{selectedProduct.name}</h2>
               <p className="modal-price">{selectedProduct.styles ? `Desde S/ ${Math.min(...selectedProduct.styles.map((style) => style.price)).toFixed(2)}` : `S/ ${selectedProduct.price.toFixed(2)}`}</p>
               {selectedProduct.styles && <label className="product-style-field"><span>Escoge tu estilo</span><select value={selectedStyle} onChange={(event) => setSelectedStyle(event.target.value)} required aria-required="true"><option value="" disabled>Selecciona un estilo</option>{selectedProduct.styles.map((style) => <option key={style.name} value={style.name}>{style.name} · S/ {style.price.toFixed(2)}</option>)}</select></label>}
+              {selectedProduct.sauces && <label className="product-style-field"><span>Escoge tu salsa</span><select value={selectedSauce} onChange={(event) => setSelectedSauce(event.target.value)} required aria-required="true"><option value="" disabled>Selecciona una salsa</option>{selectedProduct.sauces.map((sauce) => <option key={sauce.name} value={sauce.name}>{sauce.name}</option>)}</select></label>}
               {!isCraftBeerCategory && <div className="ingredients">
                 <h3>Ingredientes</h3>
                 <p>{selectedProduct.ingredients ?? 'Ingredientes por confirmar.'}</p>
@@ -309,7 +312,7 @@ function App() {
                 />
                 <small>{productNote.length}/150</small>
               </label>
-              <button className="add-button modal-add-button" type="button" disabled={Boolean(selectedProduct.styles && !selectedStyle)} onClick={() => { const style = selectedProduct.styles?.find((item) => item.name === selectedStyle); addToCart({ name: selectedProduct.name, price: style?.price ?? selectedProduct.price }, productNote, selectedStyle); setProductNote(''); setSelectedStyle(''); setSelectedProduct(null) }}>
+              <button className="add-button modal-add-button" type="button" disabled={Boolean((selectedProduct.styles && !selectedStyle) || (selectedProduct.sauces && !selectedSauce))} onClick={() => { const style = selectedProduct.styles?.find((item) => item.name === selectedStyle); addToCart({ name: selectedProduct.name, price: style?.price ?? selectedProduct.price }, productNote, selectedStyle, selectedSauce); setProductNote(''); setSelectedStyle(''); setSelectedSauce(''); setSelectedProduct(null) }}>
                 Añadir al pedido <span aria-hidden="true">＋</span>
               </button>
             </div>
@@ -336,6 +339,7 @@ function App() {
                       <div>
                         <h3>{item.name}</h3>
                         {item.style && <p className="cart-item-style">Estilo: {item.style}</p>}
+                        {item.sauce && <p className="cart-item-style">Salsa: {item.sauce}</p>}
                         {item.note && <p className="cart-item-note">Nota: {item.note}</p>}
                         <p>S/ {item.price.toFixed(2)} c/u</p>
                       </div>

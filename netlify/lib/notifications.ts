@@ -17,7 +17,7 @@ const message = (order: StoreOrder) => [
   order.receiptType === 'factura' ? 'Factura' : 'Boleta',
   order.receiptType === 'factura' ? `RUC: ${order.ruc}` : `DNI: ${order.dni || 'No proporcionado'}`,
   '',
-  ...order.items.flatMap((item) => [`${item.quantity} x ${item.name}${item.style ? ` · ${item.style}` : ''}`, ...(item.note ? [`- ${item.note}`] : [])]),
+  ...order.items.flatMap((item) => [`${item.quantity} x ${item.name}${item.style ? ` · ${item.style}` : ''}${item.sauce ? ` · Salsa ${item.sauce}` : ''}`, ...(item.note ? [`- ${item.note}`] : [])]),
   '',
   `Total: S/ ${order.total.toFixed(2)}`,
   `Pago: ${order.paymentMethod.toUpperCase()}`,
