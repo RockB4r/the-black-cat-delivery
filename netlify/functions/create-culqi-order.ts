@@ -1,10 +1,11 @@
 import { createOrder, linkCulqiOrder, saveOrder, trustedItems } from '../lib/orders'
 import { json, parseOrderInput } from '../lib/request'
-import { isOnlineOrderingOpen } from '../lib/online-ordering'
+import { getOnlineOrderingAvailability } from '../lib/online-ordering'
 
 export default async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') return json(405, { message: 'Método no permitido.' })
-  if (!isOnlineOrderingOpen()) return json(403, { message: 'Cocina Cerrada. Nuestro horario de atención online es: 6:00 PM - 1:00 AM.' })
+  const kitchenAvailability = await getOnlineOrderingAvailability()
+  if (!kitchenAvailability.isOpen) return json(403, { message: kitchenAvailability.message })
   const body: unknown = await request.json().catch(() => null)
   const input = parseOrderInput(body, 'wallet')
   const data = body as Record<string, unknown> | null

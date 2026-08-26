@@ -43,7 +43,8 @@ function App() {
   const [ruc, setRuc] = useState('')
   const [culqiMessage, setCulqiMessage] = useState('')
   const [isProcessingPayment, setIsProcessingPayment] = useState(false)
-  const [orderingOpen, setOrderingOpen] = useState(() => isOnlineOrderingOpen())
+  const [scheduleOpen, setScheduleOpen] = useState(() => isOnlineOrderingOpen())
+  const [manualKitchenClosed, setManualKitchenClosed] = useState(false)
   const checkoutFormRef = useRef<HTMLFormElement>(null)
   const activeCategory = menuCategories.find(({ id }) => id === activeCategoryId) ?? menuCategories[0]
   const isCraftBeerCategory = activeCategory.id === 'cervezas-artesanales'
@@ -53,16 +54,36 @@ function App() {
   const canPayWithCulqi = cartItems.length > 0 && subtotal > 0 && hasValidEmail
   const isCashPayment = paymentMethod === 'Efectivo'
   const culqiPublicKey = import.meta.env.VITE_CULQI_PUBLIC_KEY
+  const orderingOpen = scheduleOpen && !manualKitchenClosed
+  const kitchenClosedMessage = manualKitchenClosed
+    ? 'Cocina cerrada temporalmente. Intenta nuevamente más tarde.'
+    : `Cocina Cerrada. Nuestro horario de atención online es: ${onlineOrderingHours.display}.`
 
   useEffect(() => {
-    const refresh = () => setOrderingOpen(isOnlineOrderingOpen())
+    const refresh = () => setScheduleOpen(isOnlineOrderingOpen())
     const timer = window.setInterval(refresh, 30_000)
     return () => window.clearInterval(timer)
   }, [])
 
+  useEffect(() => {
+    let active = true
+    const refreshKitchenStatus = async () => {
+      try {
+        const response = await fetch('/.netlify/functions/kitchen-status', { cache: 'no-store' })
+        const data = await response.json() as { manualClosed?: boolean }
+        if (active && response.ok) setManualKitchenClosed(data.manualClosed === true)
+      } catch {
+        // The backend independently rejects orders when its status check is unavailable.
+      }
+    }
+    void refreshKitchenStatus()
+    const timer = window.setInterval(() => { void refreshKitchenStatus() }, 30_000)
+    return () => { active = false; window.clearInterval(timer) }
+  }, [])
+
   const getOrderPayload = () => {
     if (!orderingOpen) {
-      setCulqiMessage(`Cocina Cerrada. Nuestro horario de atención online es: ${onlineOrderingHours.display}.`)
+      setCulqiMessage(kitchenClosedMessage)
       return null
     }
     const form = checkoutFormRef.current
@@ -249,7 +270,7 @@ function App() {
         <p className="eyebrow">ROCK, BURGERS &amp; COLD BEER</p>
         <h1>El Templo del Rock<br />y del espíritu Rebelde.</h1>
         <p className="hero-copy">Pide tus favoritos para delivery o recógelos en el bar.</p>
-        {!orderingOpen && <p className="ordering-closed" role="status"><strong>Cocina Cerrada</strong><span>Nuestro horario de atención online es: {onlineOrderingHours.display}</span></p>}
+        {!orderingOpen && <p className="ordering-closed" role="status"><strong>{manualKitchenClosed ? 'Cocina cerrada temporalmente' : 'Cocina Cerrada'}</strong><span>{manualKitchenClosed ? 'Intenta nuevamente más tarde.' : `Nuestro horario de atención online es: ${onlineOrderingHours.display}`}</span></p>}
         <a className="primary-action" href="#menu">Ver el menú <span aria-hidden="true">↓</span></a>
         <div className="service-pills"><span>🛵 Delivery</span><span>✦ Recojo en el bar</span></div>
         <a className="member-home-link" href="/socios"><strong>¿Ya eres Black Cat Member?</strong><span>Consulta tus puntos aquí →</span></a>
@@ -471,7 +492,7 @@ function App() {
                 </fieldset>
                 <div className="checkout-total"><span>Productos</span><strong>S/ {subtotal.toFixed(2)}</strong></div>
                 <p className="checkout-disclaimer">El costo de delivery se confirmará según la zona. No se realizará ningún cobro en esta etapa.</p>
-                {!orderingOpen && <p className="ordering-closed checkout-closed" role="status"><strong>Cocina Cerrada</strong><span>Nuestro horario de atención online es: {onlineOrderingHours.display}</span></p>}
+                {!orderingOpen && <p className="ordering-closed checkout-closed" role="status"><strong>{manualKitchenClosed ? 'Cocina cerrada temporalmente' : 'Cocina Cerrada'}</strong><span>{manualKitchenClosed ? 'Intenta nuevamente más tarde.' : `Nuestro horario de atención online es: ${onlineOrderingHours.display}`}</span></p>}
                 {!isCashPayment && <button className="culqi-button" type="button" disabled={!orderingOpen || !canPayWithCulqi || isProcessingPayment} onClick={() => { void openCulqiCheckout() }}>
                   {isProcessingPayment ? 'Procesando pago...' : 'Pagar con Culqi'}
                 </button>}
