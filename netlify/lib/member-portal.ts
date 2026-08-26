@@ -11,6 +11,9 @@ type LoginAttempt = { count: number; resetAt: number }
 
 export const serverHeaders = (key: string, extra: Record<string, string> = {}) => ({ apikey: key, Authorization: `Bearer ${key}`, 'content-type': 'application/json', ...extra })
 
+export const normalizePhone = (phone: string | null | undefined) => (phone ?? '').replace(/\D/g, '')
+export const normalizeDocument = (document: string | null | undefined) => (document ?? '').trim().replace(/\D/g, '')
+
 export const getCookie = (request: Request, name: string) => {
   const value = request.headers.get('cookie')?.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1)
   try { return value ? decodeURIComponent(value) : '' } catch { return '' }
@@ -29,7 +32,7 @@ export const createMemberSession = async (memberId: string) => {
 export const readMemberSession = async (request: Request) => {
   const sessionId = getCookie(request, memberSessionCookie)
   if (!/^[0-9a-f-]{36}$/i.test(sessionId)) return null
-  const session = await sessions().getJSON<MemberSession>(sessionId, { consistency: 'strong' })
+  const session = await sessions().get(sessionId, { type: 'json' }) as MemberSession | null
   if (!session || Date.parse(session.expiresAt) <= Date.now()) {
     if (session) await sessions().delete(sessionId)
     return null
@@ -49,13 +52,13 @@ const attemptKey = (request: Request) => {
 
 export const checkLoginLimit = async (request: Request) => {
   const key = attemptKey(request)
-  const attempt = await attempts().getJSON<LoginAttempt>(key, { consistency: 'strong' })
+  const attempt = await attempts().get(key, { type: 'json' }) as LoginAttempt | null
   if (!attempt || attempt.resetAt <= Date.now()) return { allowed: true, key }
   return { allowed: attempt.count < 5, key, retryAfter: Math.ceil((attempt.resetAt - Date.now()) / 1000) }
 }
 
 export const recordFailedLogin = async (key: string) => {
-  const current = await attempts().getJSON<LoginAttempt>(key, { consistency: 'strong' })
+  const current = await attempts().get(key, { type: 'json' }) as LoginAttempt | null
   const active = current && current.resetAt > Date.now() ? current : { count: 0, resetAt: Date.now() + 15 * 60 * 1000 }
   await attempts().setJSON(key, { ...active, count: active.count + 1 })
 }
