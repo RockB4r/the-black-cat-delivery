@@ -21,6 +21,7 @@ const readableError = (message?: string) => {
 type KitchenStatusSetting = {
   value: {
     manual_closed?: boolean
+    force_open?: boolean
     reason?: string | null
   }
   updated_at: string
@@ -66,7 +67,7 @@ export function StaffDashboard({ profile, userId, onSignOut }: { profile: StaffP
     if (!canManageKitchen) return
     setSavingKitchenStatus(true); setMessage('')
     const { data, error } = await supabase.from('app_settings').update({
-      value: { manual_closed: manualClosed, reason: manualClosed ? kitchenClosureReason || null : null },
+      value: { manual_closed: manualClosed, force_open: false, reason: manualClosed ? kitchenClosureReason || null : null },
       updated_by: userId,
     }).eq('key', 'kitchen_status').select('value, updated_at, updated_by').single<KitchenStatusSetting>()
     if (error || !data) setMessage('No se pudo actualizar el estado de cocina. Intenta nuevamente.')

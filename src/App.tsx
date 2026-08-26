@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import menuData from './data/menu.json'
 import type { MenuCategory, MenuItem } from './data/types'
 import { isOnlineOrderingOpen, onlineOrderingHours } from './lib/onlineOrdering'
+import { isSupabaseConfigured, supabase } from './lib/supabase'
 import './App.css'
 
 type CartItem = { id: string; name: string; price: number; quantity: number; note?: string; style?: string; sauce?: string }
@@ -45,6 +46,7 @@ function App() {
   const [isProcessingPayment, setIsProcessingPayment] = useState(false)
   const [scheduleOpen, setScheduleOpen] = useState(() => isOnlineOrderingOpen())
   const [manualKitchenClosed, setManualKitchenClosed] = useState(false)
+  const [forceKitchenOpen, setForceKitchenOpen] = useState(false)
   const checkoutFormRef = useRef<HTMLFormElement>(null)
   const activeCategory = menuCategories.find(({ id }) => id === activeCategoryId) ?? menuCategories[0]
   const isCraftBeerCategory = activeCategory.id === 'cervezas-artesanales'
@@ -54,7 +56,7 @@ function App() {
   const canPayWithCulqi = cartItems.length > 0 && subtotal > 0 && hasValidEmail
   const isCashPayment = paymentMethod === 'Efectivo'
   const culqiPublicKey = import.meta.env.VITE_CULQI_PUBLIC_KEY
-  const orderingOpen = scheduleOpen && !manualKitchenClosed
+  const orderingOpen = !manualKitchenClosed && (scheduleOpen || forceKitchenOpen)
   const kitchenClosedMessage = manualKitchenClosed
     ? 'Cocina cerrada temporalmente. Intenta nuevamente más tarde.'
     : `Cocina Cerrada. Nuestro horario de atención online es: ${onlineOrderingHours.display}.`
@@ -70,8 +72,8 @@ function App() {
     const refreshKitchenStatus = async () => {
       try {
         const response = await fetch('/.netlify/functions/kitchen-status', { cache: 'no-store' })
-        const data = await response.json() as { manualClosed?: boolean }
-        if (active && response.ok) setManualKitchenClosed(data.manualClosed === true)
+        const data = await response.json() as { manualClosed?: boolean; forceOpen?: boolean }
+        if (active && response.ok) { setManualKitchenClosed(data.manualClosed === true); setForceKitchenOpen(data.forceOpen === true) }
       } catch {
         // The backend independently rejects orders when its status check is unavailable.
       }
@@ -79,6 +81,16 @@ function App() {
     void refreshKitchenStatus()
     const timer = window.setInterval(() => { void refreshKitchenStatus() }, 30_000)
     return () => { active = false; window.clearInterval(timer) }
+  }, [])
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return
+    const channel = supabase.channel('public-kitchen-availability').on('postgres_changes', { event: '*', schema: 'public', table: 'kitchen_status_public' }, (payload) => {
+      const status = payload.new as { manual_closed?: boolean; force_open?: boolean }
+      setManualKitchenClosed(status.manual_closed === true)
+      setForceKitchenOpen(status.force_open === true)
+    }).subscribe()
+    return () => { void supabase.removeChannel(channel) }
   }, [])
 
   const getOrderPayload = () => {
