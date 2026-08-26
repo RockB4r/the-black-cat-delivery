@@ -15,6 +15,7 @@ export default async (request: Request): Promise<Response> => {
   if (!secretKey) return json(500, { message: 'El pago no está disponible temporalmente.' })
 
   const order = await createOrder(input, 'pending')
+  if (order.culqiOrderId) return json(200, { internalOrderId: order.databaseOrderId, orderId: order.orderId, culqiOrderId: order.culqiOrderId, paymentStatus: order.paymentStatus })
   const [firstName, ...lastNameParts] = order.customer.split(/\s+/)
   const phoneNumber = order.phone.replace(/[^\d+]/g, '')
   try {
@@ -39,7 +40,7 @@ export default async (request: Request): Promise<Response> => {
     const updatedOrder = { ...order, culqiOrderId: culqiOrder.id }
     await saveOrder(updatedOrder)
     await linkCulqiOrder(culqiOrder.id, order.orderId)
-    return json(201, { orderId: order.orderId, culqiOrderId: culqiOrder.id, paymentStatus: 'pending' })
+    return json(201, { internalOrderId: order.databaseOrderId, orderId: order.orderId, culqiOrderId: culqiOrder.id, paymentStatus: 'pending' })
   } catch (error) {
     console.error('Culqi order request failed:', error)
     return json(502, { message: 'No fue posible conectar con Culqi.' })

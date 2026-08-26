@@ -1,7 +1,7 @@
 import { getStore } from '@netlify/blobs'
 import menuData from '../../src/data/menu.json'
 import type { MenuCategory } from '../../src/data/types'
-import { persistKitchenOrder, syncKitchenPaymentStatus } from './kitchen'
+import { syncKitchenPaymentStatus } from './kitchen'
 
 export type PaymentMethod = 'cash' | 'card' | 'wallet'
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'expired'
@@ -11,6 +11,8 @@ export type ReceiptType = 'boleta' | 'factura'
 export type OrderItem = { name: string; price: number; quantity: number; note?: string; style?: string; sauce?: string }
 export type StoreOrder = {
   orderId: string
+  databaseOrderId?: string
+  checkoutId: string
   createdAt: string
   customer: string
   phone: string
@@ -31,9 +33,10 @@ export type StoreOrder = {
   whatsappNotificationStatus: NotificationStatus
 }
 
-export type OrderInput = Omit<StoreOrder, 'orderId' | 'createdAt' | 'total' | 'paymentStatus' | 'culqiChargeId' | 'culqiOrderId' | 'emailNotificationStatus' | 'whatsappNotificationStatus' | 'notes'>
+export type OrderInput = Omit<StoreOrder, 'orderId' | 'databaseOrderId' | 'createdAt' | 'total' | 'paymentStatus' | 'culqiChargeId' | 'culqiOrderId' | 'emailNotificationStatus' | 'whatsappNotificationStatus' | 'notes'>
 
 const orders = () => getStore({ name: 'the-black-cat-orders', consistency: 'strong' })
+const checkoutLinks = () => getStore({ name: 'the-black-cat-checkout-links', consistency: 'strong' })
 const catalog = new Map((menuData as MenuCategory[]).flatMap((category) => category.items.map((item) => [item.name, item] as const)))
 
 export const buildOrderId = () => `TBC-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`
@@ -57,7 +60,61 @@ export const trustedItems = (items: unknown): { items: OrderItem[]; total: numbe
   return Number.isSafeInteger(total * 100) && total > 0 ? { items: validated, total } : null
 }
 
+type KitchenOrderInsertResult = { order_id: string; order_number: string; created: boolean }
+
+const kitchenOrderPayload = (order: StoreOrder) => ({
+  order_number: order.orderId,
+  checkout_id: order.checkoutId,
+  customer_name: order.customer,
+  customer_email: order.email || '',
+  customer_phone: order.phone,
+  order_type: order.fulfillment === 'delivery' ? 'delivery' : 'pick_up',
+  delivery_address: order.fulfillment === 'delivery' ? order.address : '',
+  delivery_reference: '',
+  payment_method: order.paymentMethod,
+  payment_status: order.paymentStatus,
+  subtotal: order.total,
+  delivery_fee: 0,
+  total: order.total,
+  notes: order.notes.join('\n'),
+  created_at: order.createdAt,
+})
+
+const kitchenItemsPayload = (order: StoreOrder) => order.items.map((item) => ({
+  product_name: `${item.name}${item.style ? ` · ${item.style}` : ''}${item.sauce ? ` · Salsa ${item.sauce}` : ''}`,
+  category: categoryByProduct.get(item.name) ?? 'Sin categoría',
+  quantity: item.quantity,
+  unit_price: item.price,
+  notes: item.note ?? '',
+}))
+
+const categoryByProduct = new Map((menuData as MenuCategory[]).flatMap((category) => category.items.map((item) => [item.name, category.name] as const)))
+
+const persistOrderAndItems = async (order: StoreOrder): Promise<KitchenOrderInsertResult> => {
+  const url = process.env.SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !serviceRoleKey) throw new Error('Supabase server environment is incomplete.')
+  const response = await fetch(`${url}/rest/v1/rpc/create_kitchen_order_with_items`, {
+    method: 'POST',
+    headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ p_order: kitchenOrderPayload(order), p_items: kitchenItemsPayload(order) }),
+  })
+  const result: unknown = await response.json().catch(() => null)
+  if (!response.ok || !Array.isArray(result) || !result[0] || typeof result[0] !== 'object') throw new Error(`Atomic kitchen order creation failed with HTTP ${response.status}`)
+  const row = result[0] as Partial<KitchenOrderInsertResult>
+  if (typeof row.order_id !== 'string' || typeof row.order_number !== 'string' || typeof row.created !== 'boolean') throw new Error('Atomic kitchen order creation returned an invalid response.')
+  return row as KitchenOrderInsertResult
+}
+
+export const getOrderByCheckoutId = async (checkoutId: string) => {
+  const orderId = await checkoutLinks().get(checkoutId, { consistency: 'strong' })
+  return typeof orderId === 'string' ? getOrder(orderId) : null
+}
+
 export const createOrder = async (input: OrderInput, paymentStatus: PaymentStatus): Promise<StoreOrder> => {
+  const existing = await getOrderByCheckoutId(input.checkoutId)
+  if (existing) return existing
+
   const order: StoreOrder = {
     ...input,
     orderId: buildOrderId(),
@@ -68,8 +125,15 @@ export const createOrder = async (input: OrderInput, paymentStatus: PaymentStatu
     emailNotificationStatus: 'pending',
     whatsappNotificationStatus: 'pending',
   }
+  const saved = await persistOrderAndItems(order)
+  if (!saved.created) {
+    const concurrentOrder = await getOrder(saved.order_number)
+    if (concurrentOrder) return concurrentOrder
+    throw new Error('The checkout is already being processed. Retry this same operation in a moment.')
+  }
+  order.databaseOrderId = saved.order_id
   await orders().setJSON(order.orderId, order, { onlyIfNew: true })
-  await persistKitchenOrder(order)
+  await checkoutLinks().set(input.checkoutId, order.orderId, { onlyIfNew: true })
   return order
 }
 

@@ -48,6 +48,8 @@ function App() {
   const [manualKitchenClosed, setManualKitchenClosed] = useState(false)
   const [forceKitchenOpen, setForceKitchenOpen] = useState(false)
   const checkoutFormRef = useRef<HTMLFormElement>(null)
+  const checkoutIdRef = useRef<string | null>(null)
+  const internalOrderIdRef = useRef<string | null>(null)
   const activeCategory = menuCategories.find(({ id }) => id === activeCategoryId) ?? menuCategories[0]
   const isCraftBeerCategory = activeCategory.id === 'cervezas-artesanales'
   const itemCount = cartItems.reduce((total, item) => total + item.quantity, 0)
@@ -109,7 +111,10 @@ function App() {
       setCulqiMessage('El DNI debe tener exactamente 8 dígitos.')
       return null
     }
+    const checkoutId = checkoutIdRef.current ?? crypto.randomUUID()
+    checkoutIdRef.current = checkoutId
     return {
+      checkoutId,
       customer: String(formData.get('name')).trim(),
       phone: String(formData.get('phone')).trim(),
       email: customerEmail.trim(),
@@ -154,6 +159,8 @@ function App() {
     setIsCartOpen(false)
     setIsCheckoutOpen(true)
     setIsOrderSubmitted(false)
+    checkoutIdRef.current = crypto.randomUUID()
+    internalOrderIdRef.current = null
   }
 
   const handleCulqiAction = async (culqi: CulqiCheckoutInstance) => {
@@ -170,6 +177,7 @@ function App() {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             token: culqi.token.id,
+            internalOrderId: internalOrderIdRef.current,
             amount: Math.round(subtotal * 100),
             currency: 'PEN',
             ...order,
@@ -229,8 +237,9 @@ function App() {
           method: 'POST', headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ ...orderPayload, amount: amountInCents, currency: 'PEN' }),
         })
-        const result = await response.json() as { orderId?: string; culqiOrderId?: string; message?: string }
-        if (!response.ok || !result.orderId || !result.culqiOrderId) { setCulqiMessage(result.message ?? 'No fue posible generar la orden de pago.'); return }
+        const result = await response.json() as { internalOrderId?: string; orderId?: string; culqiOrderId?: string; message?: string }
+        if (!response.ok || !result.internalOrderId || !result.orderId || !result.culqiOrderId) { setCulqiMessage(result.message ?? 'No fue posible generar la orden de pago.'); return }
+        internalOrderIdRef.current = result.internalOrderId
         backendOrderId = result.culqiOrderId
         setCulqiMessage(`Pago en proceso de confirmación · Pedido: ${result.orderId}`)
       } catch { setCulqiMessage('No fue posible conectar con el servicio de pago.'); return } finally { setIsProcessingPayment(false) }
@@ -496,7 +505,7 @@ function App() {
                   <div className="payment-options">
                     {['Efectivo', 'Pagar con Culqi'].map((method) => (
                       <label key={method} className={paymentMethod === method ? 'payment-option active' : 'payment-option'}>
-                        <input type="radio" name="payment" value={method} checked={paymentMethod === method} onChange={() => setPaymentMethod(method)} />
+                        <input type="radio" name="payment" value={method} checked={paymentMethod === method} onChange={() => { if (paymentMethod !== method) { checkoutIdRef.current = crypto.randomUUID(); internalOrderIdRef.current = null } setPaymentMethod(method) }} />
                         {method}
                       </label>
                     ))}

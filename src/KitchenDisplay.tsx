@@ -78,7 +78,7 @@ export function KitchenDisplay() {
   useEffect(() => {
     if (!user) return
     const loadOrders = async () => {
-      const { data, error } = await supabase.from('orders').select('id, order_number, customer_name, customer_phone, order_type, delivery_address, delivery_reference, payment_status, status, total, notes, created_at, order_items(id, product_name, category, quantity, unit_price, notes)').in('status', ['nuevo', 'preparando', 'listo', 'en_camino']).order('created_at', { ascending: true })
+      const { data, error } = await supabase.from('orders').select('id, order_number, customer_name, customer_phone, order_type, delivery_address, delivery_reference, payment_status, status, total, notes, created_at, order_items(id, product_name, category, quantity, unit_price, notes)').in('status', ['nuevo', 'preparando', 'listo', 'en_camino']).or('payment_method.eq.cash,payment_status.eq.paid').order('created_at', { ascending: true })
       if (error) { setMessage('No se pudieron cargar los pedidos. Revisa tu conexión e intenta nuevamente.'); return }
       setOrders((data ?? []) as KitchenOrder[])
     }
