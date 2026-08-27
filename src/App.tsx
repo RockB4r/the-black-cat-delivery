@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import menuData from './data/menu.json'
 import type { MenuCategory, MenuItem } from './data/types'
+import { productKey } from './data/productKeys'
 import { isOnlineOrderingOpen, onlineOrderingHours } from './lib/onlineOrdering'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import './App.css'
 
-type CartItem = { id: string; name: string; price: number; quantity: number; note?: string; style?: string; sauce?: string }
+type CartItem = { id: string; productKey: string; name: string; price: number; quantity: number; note?: string; style?: string; sauce?: string }
+type AvailabilityRow = { product_key: string; is_available: boolean }
 type SubmittedOrder = {
   orderId?: string
   customerName: string
@@ -22,6 +24,16 @@ type CulqiChargeResponse = {
   message?: string
   chargeId?: string
   orderId?: string
+  code?: string
+  unavailable_products?: string[]
+}
+type OrderRequestResponse = {
+  internalOrderId?: string
+  orderId?: string
+  culqiOrderId?: string
+  message?: string
+  code?: string
+  unavailable_products?: string[]
 }
 const menuCategories = menuData as MenuCategory[]
 
@@ -47,6 +59,7 @@ function App() {
   const [scheduleOpen, setScheduleOpen] = useState(() => isOnlineOrderingOpen())
   const [manualKitchenClosed, setManualKitchenClosed] = useState(false)
   const [forceKitchenOpen, setForceKitchenOpen] = useState(false)
+  const [productAvailability, setProductAvailability] = useState<Record<string, boolean>>({})
   const checkoutFormRef = useRef<HTMLFormElement>(null)
   const checkoutIdRef = useRef<string | null>(null)
   const internalOrderIdRef = useRef<string | null>(null)
@@ -54,6 +67,7 @@ function App() {
   const isCraftBeerCategory = activeCategory.id === 'cervezas-artesanales'
   const itemCount = cartItems.reduce((total, item) => total + item.quantity, 0)
   const subtotal = useMemo(() => cartItems.reduce((total, item) => total + item.price * item.quantity, 0), [cartItems])
+  const unavailableCartItems = useMemo(() => cartItems.filter((item) => productAvailability[item.productKey] === false), [cartItems, productAvailability])
   const hasValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim())
   const canPayWithCulqi = cartItems.length > 0 && subtotal > 0 && hasValidEmail
   const isCashPayment = paymentMethod === 'Efectivo'
@@ -63,10 +77,40 @@ function App() {
     ? 'Cocina cerrada temporalmente. Intenta nuevamente más tarde.'
     : `Cocina Cerrada. Nuestro horario de atención online es: ${onlineOrderingHours.display}.`
 
+  const isProductAvailable = (name: string) => {
+    const key = productKey(name)
+    return !key || productAvailability[key] !== false
+  }
+
+  const orderErrorMessage = (result: { message?: string; code?: string; unavailable_products?: string[] }, fallback: string) => {
+    if (result.code === 'PRODUCT_UNAVAILABLE' && result.unavailable_products?.length) {
+      return `Ya no están disponibles: ${result.unavailable_products.join(', ')}. Elimínalos del carrito para continuar.`
+    }
+    return result.message ?? fallback
+  }
+
   useEffect(() => {
     const refresh = () => setScheduleOpen(isOnlineOrderingOpen())
     const timer = window.setInterval(refresh, 30_000)
     return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return
+    let active = true
+    const loadAvailability = async () => {
+      const { data, error } = await supabase.from('product_availability').select('product_key, is_available')
+      if (error || !active) return
+      setProductAvailability(Object.fromEntries((data as AvailabilityRow[]).map((item) => [item.product_key, item.is_available])))
+    }
+    void loadAvailability()
+    const channel = supabase.channel('public-product-availability').on('postgres_changes', { event: '*', schema: 'public', table: 'product_availability' }, (payload) => {
+      const row = payload.new as Partial<AvailabilityRow>
+      const key = row.product_key
+      const isAvailable = row.is_available
+      if (typeof key === 'string' && typeof isAvailable === 'boolean') setProductAvailability((current) => ({ ...current, [key]: isAvailable }))
+    }).subscribe()
+    return () => { active = false; void supabase.removeChannel(channel) }
   }, [])
 
   useEffect(() => {
@@ -98,6 +142,10 @@ function App() {
   const getOrderPayload = () => {
     if (!orderingOpen) {
       setCulqiMessage(kitchenClosedMessage)
+      return null
+    }
+    if (unavailableCartItems.length) {
+      setCulqiMessage(`Uno o más productos de tu carrito ya no están disponibles: ${unavailableCartItems.map((item) => item.name).join(', ')}.`)
       return null
     }
     const form = checkoutFormRef.current
@@ -134,14 +182,16 @@ function App() {
     setSelectedSauce(item.sauces?.length === 1 ? item.sauces[0].name : '')
   }
 
-  const addToCart = (item: { name: string; price: number }, note = '', style = '', sauce = '') => {
+  const addToCart = (item: MenuItem, note = '', style = '', sauce = '') => {
+    const key = productKey(item.name)
+    if (!key || !isProductAvailable(item.name)) return
     const trimmedNote = note.trim()
-    const id = [activeCategory.id, item.name, style, sauce, trimmedNote].join('-')
+    const id = [key, style, sauce, trimmedNote].join('-')
     setCartItems((current) => {
       const existing = current.find((cartItem) => cartItem.id === id)
       return existing
         ? current.map((cartItem) => cartItem.id === id ? { ...cartItem, quantity: cartItem.quantity + 1 } : cartItem)
-        : [...current, { ...item, id, style: style || undefined, sauce: sauce || undefined, note: trimmedNote || undefined, quantity: 1 }]
+        : [...current, { id, productKey: key, name: item.name, price: item.price, style: style || undefined, sauce: sauce || undefined, note: trimmedNote || undefined, quantity: 1 }]
     })
     setIsCartOpen(true)
   }
@@ -155,7 +205,12 @@ function App() {
   }
 
   const removeItem = (id: string) => setCartItems((current) => current.filter((item) => item.id !== id))
+  const removeUnavailableItems = () => setCartItems((current) => current.filter((item) => productAvailability[item.productKey] !== false))
   const startCheckout = () => {
+    if (unavailableCartItems.length) {
+      setCulqiMessage(`Ya no están disponibles: ${unavailableCartItems.map((item) => item.name).join(', ')}. Elimínalos del carrito para continuar.`)
+      return
+    }
     setIsCartOpen(false)
     setIsCheckoutOpen(true)
     setIsOrderSubmitted(false)
@@ -189,7 +244,7 @@ function App() {
         const result = await response.json() as CulqiChargeResponse
 
         if (!response.ok || !result.approved) {
-          setCulqiMessage(result.message ?? 'El pago no pudo procesarse. Tu carrito se conserva intacto.')
+          setCulqiMessage(orderErrorMessage(result, 'El pago no pudo procesarse. Tu carrito se conserva intacto.'))
           return
         }
 
@@ -237,8 +292,8 @@ function App() {
           method: 'POST', headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ ...orderPayload, amount: amountInCents, currency: 'PEN' }),
         })
-        const result = await response.json() as { internalOrderId?: string; orderId?: string; culqiOrderId?: string; message?: string }
-        if (!response.ok || !result.internalOrderId || !result.orderId || !result.culqiOrderId) { setCulqiMessage(result.message ?? 'No fue posible generar la orden de pago.'); return }
+        const result = await response.json() as OrderRequestResponse
+        if (!response.ok || !result.internalOrderId || !result.orderId || !result.culqiOrderId) { setCulqiMessage(orderErrorMessage(result, 'No fue posible generar la orden de pago.')); return }
         internalOrderIdRef.current = result.internalOrderId
         backendOrderId = result.culqiOrderId
         setCulqiMessage(`Pago en proceso de confirmación · Pedido: ${result.orderId}`)
@@ -311,9 +366,10 @@ function App() {
           ))}
         </div>
         <div className="product-grid" role="tabpanel">
-          {activeCategory.items.map((item, index) => (
-            <article
-              className={item.image ? 'product-card has-image' : 'product-card'}
+          {activeCategory.items.map((item, index) => {
+            const isAvailable = isProductAvailable(item.name)
+            return <article
+              className={`${item.image ? 'product-card has-image' : 'product-card'}${isAvailable ? '' : ' sold-out'}`}
               key={item.name}
               role="button"
               tabIndex={0}
@@ -327,14 +383,15 @@ function App() {
               }}
             >
               {item.image && <img className="product-image" src={item.image} alt={item.name} />}
+              {!isAvailable && <span className="sold-out-badge">Agotado</span>}
               <span className="product-number">{String(index + 1).padStart(2, '0')}</span>
               <h3>{item.name}</h3>
               <div className="product-footer">
                 <p className="price">{item.styles ? `Desde S/ ${Math.min(...item.styles.map((style) => style.price)).toFixed(2)}` : `S/ ${item.price.toFixed(2)}`}</p>
-                <button className="add-button" type="button" onClick={(event) => { event.stopPropagation(); item.styles || item.sauces ? openProductModal(item) : addToCart(item) }}>{item.styles || item.sauces ? 'Escoger' : 'Añadir'} <span aria-hidden="true">＋</span></button>
+                <button className="add-button" type="button" disabled={!isAvailable} onClick={(event) => { event.stopPropagation(); item.styles || item.sauces ? openProductModal(item) : addToCart(item) }}>{isAvailable ? item.styles || item.sauces ? 'Escoger' : 'Añadir' : 'Agotado'} <span aria-hidden="true">＋</span></button>
               </div>
             </article>
-          ))}
+          })}
         </div>
       </section>
 
@@ -368,8 +425,9 @@ function App() {
                 />
                 <small>{productNote.length}/150</small>
               </label>
-              <button className="add-button modal-add-button" type="button" disabled={Boolean((selectedProduct.styles && !selectedStyle) || (selectedProduct.sauces && !selectedSauce))} onClick={() => { const style = selectedProduct.styles?.find((item) => item.name === selectedStyle); addToCart({ name: selectedProduct.name, price: style?.price ?? selectedProduct.price }, productNote, selectedStyle, selectedSauce); setProductNote(''); setSelectedStyle(''); setSelectedSauce(''); setSelectedProduct(null) }}>
-                Añadir al pedido <span aria-hidden="true">＋</span>
+              {!isProductAvailable(selectedProduct.name) && <p className="product-unavailable-message">Este producto está agotado por el momento.</p>}
+              <button className="add-button modal-add-button" type="button" disabled={!isProductAvailable(selectedProduct.name) || Boolean((selectedProduct.styles && !selectedStyle) || (selectedProduct.sauces && !selectedSauce))} onClick={() => { const style = selectedProduct.styles?.find((item) => item.name === selectedStyle); addToCart({ ...selectedProduct, price: style?.price ?? selectedProduct.price }, productNote, selectedStyle, selectedSauce); setProductNote(''); setSelectedStyle(''); setSelectedSauce(''); setSelectedProduct(null) }}>
+                {isProductAvailable(selectedProduct.name) ? 'Añadir al pedido' : 'Agotado'} <span aria-hidden="true">＋</span>
               </button>
             </div>
           </section>
@@ -394,6 +452,7 @@ function App() {
                     <article className="cart-item" key={item.id}>
                       <div>
                         <h3>{item.name}</h3>
+                        {productAvailability[item.productKey] === false && <p className="cart-item-unavailable">Agotado</p>}
                         {item.style && <p className="cart-item-style">Estilo: {item.style}</p>}
                         {item.sauce && <p className="cart-item-style">Salsa: {item.sauce}</p>}
                         {item.note && <p className="cart-item-note">Nota: {item.note}</p>}
@@ -404,7 +463,7 @@ function App() {
                         <div className="quantity-control">
                           <button type="button" aria-label={`Quitar una unidad de ${item.name}`} onClick={() => changeQuantity(item.id, -1)}>−</button>
                           <span>{item.quantity}</span>
-                          <button type="button" aria-label={`Añadir una unidad de ${item.name}`} onClick={() => changeQuantity(item.id, 1)}>＋</button>
+                          <button type="button" disabled={productAvailability[item.productKey] === false} aria-label={`Añadir una unidad de ${item.name}`} onClick={() => changeQuantity(item.id, 1)}>＋</button>
                         </div>
                       </div>
                     </article>
@@ -413,6 +472,7 @@ function App() {
                 <div className="cart-summary">
                   <div><span>Subtotal</span><strong>S/ {subtotal.toFixed(2)}</strong></div>
                   <p>El delivery y método de pago se elegirán en el siguiente paso.</p>
+                  {unavailableCartItems.length > 0 && <div className="unavailable-cart-warning" role="status"><strong>Uno o más productos ya no están disponibles.</strong><span>{unavailableCartItems.map((item) => item.name).join(', ')}</span><button className="remove-button" type="button" onClick={removeUnavailableItems}>Eliminar productos agotados</button></div>}
                   <button className="checkout-button" type="button" onClick={startCheckout}>Continuar con el pedido</button>
                 </div>
               </>
@@ -448,8 +508,8 @@ function App() {
                   const response = await fetch('/.netlify/functions/create-cash-order', {
                     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(orderPayload),
                   })
-                  const result = await response.json() as { orderId?: string; message?: string }
-                  if (!response.ok || !result.orderId) { setCulqiMessage(result.message ?? 'No fue posible registrar el pedido. Inténtalo nuevamente.'); return }
+                  const result = await response.json() as OrderRequestResponse
+                  if (!response.ok || !result.orderId) { setCulqiMessage(orderErrorMessage(result, 'No fue posible registrar el pedido. Inténtalo nuevamente.')); return }
                   setSubmittedOrder({
                     orderId: result.orderId,
                     customerName: String(formData.get('name')),
@@ -513,6 +573,7 @@ function App() {
                 </fieldset>
                 <div className="checkout-total"><span>Productos</span><strong>S/ {subtotal.toFixed(2)}</strong></div>
                 <p className="checkout-disclaimer">El costo de delivery se confirmará según la zona. No se realizará ningún cobro en esta etapa.</p>
+                {unavailableCartItems.length > 0 && <div className="unavailable-cart-warning" role="status"><strong>Uno o más productos de tu carrito ya no están disponibles.</strong><span>{unavailableCartItems.map((item) => item.name).join(', ')}</span><button className="remove-button" type="button" onClick={removeUnavailableItems}>Eliminar productos agotados</button></div>}
                 {!orderingOpen && <p className="ordering-closed checkout-closed" role="status"><strong>{manualKitchenClosed ? 'Cocina cerrada temporalmente' : 'Cocina Cerrada'}</strong><span>{manualKitchenClosed ? 'Intenta nuevamente más tarde.' : `Nuestro horario de atención online es: ${onlineOrderingHours.display}`}</span></p>}
                 {!isCashPayment && <button className="culqi-button" type="button" disabled={!orderingOpen || !canPayWithCulqi || isProcessingPayment} onClick={() => { void openCulqiCheckout() }}>
                   {isProcessingPayment ? 'Procesando pago...' : 'Pagar con Culqi'}

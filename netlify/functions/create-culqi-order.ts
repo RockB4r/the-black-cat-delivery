@@ -1,6 +1,7 @@
 import { createOrder, linkCulqiOrder, saveOrder, trustedItems } from '../lib/orders'
 import { json, parseOrderInput } from '../lib/request'
 import { getOnlineOrderingAvailability } from '../lib/online-ordering'
+import { getUnavailableProducts, ProductAvailabilityError } from '../lib/product-availability'
 
 export default async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') return json(405, { message: 'Método no permitido.' })
@@ -13,6 +14,15 @@ export default async (request: Request): Promise<Response> => {
   if (!input || !validated || data?.currency !== 'PEN' || data?.amount !== validated.total * 100) return json(400, { message: 'Los datos del pedido no son válidos.' })
   const secretKey = process.env.CULQI_SECRET_KEY
   if (!secretKey) return json(500, { message: 'El pago no está disponible temporalmente.' })
+
+  let unavailableProducts: string[]
+  try {
+    unavailableProducts = await getUnavailableProducts(input.items)
+  } catch (error) {
+    if (error instanceof ProductAvailabilityError) return json(503, { code: 'PRODUCT_AVAILABILITY_UNAVAILABLE', message: 'No fue posible verificar la disponibilidad. Inténtalo nuevamente.' })
+    throw error
+  }
+  if (unavailableProducts.length) return json(409, { code: 'PRODUCT_UNAVAILABLE', unavailable_products: unavailableProducts, message: 'Uno o más productos ya no están disponibles.' })
 
   const order = await createOrder(input, 'pending')
   if (order.culqiOrderId) return json(200, { internalOrderId: order.databaseOrderId, orderId: order.orderId, culqiOrderId: order.culqiOrderId, paymentStatus: order.paymentStatus })

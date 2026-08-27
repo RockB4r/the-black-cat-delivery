@@ -3,6 +3,7 @@ import { getOrderByCheckoutId, trustedItems } from '../lib/orders'
 import { getStore } from '@netlify/blobs'
 import { json, parseOrderInput } from '../lib/request'
 import { getOnlineOrderingAvailability } from '../lib/online-ordering'
+import { getUnavailableProducts, ProductAvailabilityError } from '../lib/product-availability'
 
 export default async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') {
@@ -24,6 +25,14 @@ export default async (request: Request): Promise<Response> => {
   if (!order || order.paymentStatus === 'expired' || !internalOrderId || order.databaseOrderId !== internalOrderId) return json(409, { approved: false, message: 'Este intento de pago ya no está disponible. Inicia un nuevo pedido.' })
   if (order.paymentStatus === 'paid') return json(200, { approved: true, chargeId: order.culqiChargeId, orderId: order.orderId })
   if (order.total !== validated.total || order.email !== input.email || order.checkoutId !== input.checkoutId) return json(409, { approved: false, message: 'Los datos del intento de pago no coinciden. Inicia un nuevo pedido.' })
+
+  try {
+    const unavailableProducts = await getUnavailableProducts(order.items)
+    if (unavailableProducts.length) return json(409, { approved: false, code: 'PRODUCT_UNAVAILABLE', unavailable_products: unavailableProducts, message: 'Uno o más productos ya no están disponibles.' })
+  } catch (error) {
+    if (error instanceof ProductAvailabilityError) return json(503, { approved: false, code: 'PRODUCT_AVAILABILITY_UNAVAILABLE', message: 'No fue posible verificar la disponibilidad. Inténtalo nuevamente.' })
+    throw error
+  }
 
   const paymentLock = await getStore({ name: 'the-black-cat-payment-locks', consistency: 'strong' }).set(`${input.checkoutId}/card`, new Date().toISOString(), { onlyIfNew: true })
   if (!paymentLock.modified) return json(409, { approved: false, message: 'Este pago ya se está procesando. Espera unos segundos antes de reintentar.' })
