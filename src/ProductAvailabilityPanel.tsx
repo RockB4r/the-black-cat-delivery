@@ -48,11 +48,11 @@ export function ProductAvailabilityPanel({ user, role }: { user: User; role: Sta
   return <section className="product-availability-panel">
     <div><p className="eyebrow">OPERACIÓN</p><h2>Disponibilidad de productos</h2><p>Marca un producto como agotado para retirarlo temporalmente de pedidos web.</p></div>
     {message && <p className="kitchen-message error" role="status">{message}</p>}
-    <div className="product-availability-categories">{menuCategories.map((category) => <section key={category.id}><h3>{category.name}</h3><div>{category.items.map((item) => {
+    <div className="product-availability-categories">{menuCategories.map((category) => <details key={category.id} className="product-availability-category"><summary><span>{category.name}</span><small>{category.items.length} productos</small></summary><div>{category.items.map((item) => {
       const key = productKey(item.name)
       const isAvailable = key ? availability[key] !== false : true
-      return <article key={item.name}><span>{item.name}</span><button type="button" disabled={!key || updatingKey === key} className={isAvailable ? 'availability-button available' : 'availability-button unavailable'} onClick={() => void updateAvailability(item.name)}>{updatingKey === key ? 'Actualizando…' : isAvailable ? 'Disponible' : 'Agotado'}</button></article>
-    })}</div></section>)}</div>
+      return <article key={item.name}><span>{item.name}</span><button type="button" disabled={!key || updatingKey === key} className={isAvailable ? 'availability-button available' : 'availability-button unavailable'} onClick={() => void updateAvailability(item.name)}>{updatingKey === key ? 'Actualizando…' : isAvailable ? 'Disponible' : 'No disponible'}</button></article>
+    })}</div></details>)}</div>
     {role === 'manager' || role === 'admin' ? <small>Los cambios quedan registrados con tu usuario.</small> : <small>Los cambios quedan registrados con el usuario de Cocina.</small>}
   </section>
 }
