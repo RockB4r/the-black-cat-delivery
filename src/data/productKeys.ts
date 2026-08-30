@@ -4,7 +4,7 @@ const keysByProductName: Record<string, string> = {
   'Ramones Burger': 'ramones-burger',
   'Rancid Burger': 'rancid-burger',
   'The Clash Burger': 'the-clash-burger',
-  'Sex Pistol Burger': 'sex-pistol-burger',
+  'Sex Pistols Burger': 'sex-pistol-burger',
   'Chicken Club': 'chicken-club',
   'American Way': 'american-way',
   'Fat Cat': 'fat-cat',

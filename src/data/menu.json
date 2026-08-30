@@ -8,7 +8,7 @@
       { "name": "Ramones Burger", "price": 28, "image": "/productos/Ramones.jpg", "ingredients": "Lechuga, tomate, 150g de res, cheddar, huevo, doble crispy bacon, salsa BBQ y crispy onions." },
       { "name": "Rancid Burger", "price": 30, "image": "/productos/Rancid.jpg", "ingredients": "Salsa casera, 150g de res, cheddar, chorizo parrillero, cebolla caramelizada y jalapeños." },
       { "name": "The Clash Burger", "price": 38, "image": "/productos/TheClash.jpg", "ingredients": "Salsa chipotle, 300g de res, doble cheddar o Edam, chimichurri, crispy onions y jalapeños (opcional)." },
-      { "name": "Sex Pistol Burger", "price": 38, "image": "/productos/Sex-Pistol-Burger.png", "ingredients": "Salsa casera, lechuga, tomate, jamón americano, Edam, 150g de res, huevo, chorizo parrillero, BBQ y crispy onions." }
+      { "name": "Sex Pistols Burger", "price": 36, "image": "/productos/Sex-Pistol-Burger.png", "ingredients": "Salsa casera, lechuga, tomate, jamón americano, Edam, 150g de res, huevo, chorizo parrillero, BBQ y crispy onions." }
     ]
   },
   {
