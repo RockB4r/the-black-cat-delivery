@@ -37,6 +37,7 @@ type MetaWindow = Window & {
 }
 
 const kitchenClosureReasons = ['Alta demanda', 'Falta de personal', 'Problema técnico', 'Cierre anticipado', 'Otro']
+let facebookSdkInitialized = false
 
 export function StaffDashboard({ profile, userId, onSignOut }: { profile: StaffProfile; userId: string; onSignOut: () => Promise<void> }) {
   const [documentNumber, setDocumentNumber] = useState(''); const [phone, setPhone] = useState(''); const [member, setMember] = useState<Member | null>(null)
@@ -50,7 +51,7 @@ export function StaffDashboard({ profile, userId, onSignOut }: { profile: StaffP
   const [auditFor, setAuditFor] = useState<string | null>(null); const [audits, setAudits] = useState<ConsumptionAudit[]>([]); const [loadingAudit, setLoadingAudit] = useState(false)
   const [editingMember, setEditingMember] = useState(false); const [editName, setEditName] = useState(''); const [editPhone, setEditPhone] = useState(''); const [editEmail, setEditEmail] = useState(''); const [savingMemberUpdate, setSavingMemberUpdate] = useState(false)
   const [kitchenStatus, setKitchenStatus] = useState<KitchenStatusSetting | null>(null); const [loadingKitchenStatus, setLoadingKitchenStatus] = useState(false); const [savingKitchenStatus, setSavingKitchenStatus] = useState(false); const [showKitchenCloseForm, setShowKitchenCloseForm] = useState(false); const [kitchenClosureReason, setKitchenClosureReason] = useState('')
-  const [whatsappOnboardingMessage, setWhatsappOnboardingMessage] = useState(''); const [whatsappOnboardingBusy, setWhatsappOnboardingBusy] = useState(false); const [whatsappConnection, setWhatsappConnection] = useState<{ wabaId?: string; phoneNumberId?: string; businessId?: string; status?: string; message?: string } | null>(null)
+  const [whatsappOnboardingMessage, setWhatsappOnboardingMessage] = useState(''); const [whatsappOnboardingBusy, setWhatsappOnboardingBusy] = useState(false); const [facebookSdkReady, setFacebookSdkReady] = useState(false); const [whatsappConnection, setWhatsappConnection] = useState<{ wabaId?: string; phoneNumberId?: string; businessId?: string; status?: string; message?: string } | null>(null)
   const role = profile.role
   const isStaff = role === 'staff'
   const isManager = role === 'manager'
@@ -72,27 +73,42 @@ export function StaffDashboard({ profile, userId, onSignOut }: { profile: StaffP
 
   useEffect(() => {
     if (!canManageKitchen) return
-    const existingScript = document.querySelector('script[data-whatsapp-sdk]')
-    if (existingScript) return
-    const script = document.createElement('script')
-    script.src = 'https://connect.facebook.net/en_US/sdk.js'
-    script.async = true
-    script.defer = true
-    script.crossOrigin = 'anonymous'
-    script.dataset.whatsappSdk = 'true'
-    script.onload = () => {
-      const metaWindow = window as MetaWindow
-      metaWindow.fbAsyncInit = () => {
-        if (!metaWindow.FB) return
+    let mounted = true
+    const metaWindow = window as MetaWindow
+    metaWindow.fbAsyncInit = () => {
+      if (!metaWindow.FB) return
+      if (!facebookSdkInitialized) {
         metaWindow.FB.init({
           appId: import.meta.env.VITE_META_APP_ID || '',
           autoLogAppEvents: true,
           xfbml: true,
           version: 'v25.0',
         })
+        facebookSdkInitialized = true
       }
+      if (mounted) setFacebookSdkReady(true)
     }
-    document.head.appendChild(script)
+
+    const existingScript = document.querySelector<HTMLScriptElement>('script[data-whatsapp-sdk]')
+    const initializeExistingSdk = () => metaWindow.fbAsyncInit?.()
+    if (metaWindow.FB) {
+      metaWindow.fbAsyncInit()
+    } else if (existingScript) {
+      existingScript.addEventListener('load', initializeExistingSdk, { once: true })
+    } else {
+      const script = document.createElement('script')
+      script.src = 'https://connect.facebook.net/en_US/sdk.js'
+      script.async = true
+      script.defer = true
+      script.crossOrigin = 'anonymous'
+      script.dataset.whatsappSdk = 'true'
+      document.head.appendChild(script)
+    }
+
+    return () => {
+      mounted = false
+      existingScript?.removeEventListener('load', initializeExistingSdk)
+    }
   }, [canManageKitchen])
 
   useEffect(() => {
@@ -143,12 +159,22 @@ export function StaffDashboard({ profile, userId, onSignOut }: { profile: StaffP
       setWhatsappOnboardingMessage('Falta VITE_META_APP_ID en la app para iniciar Embedded Signup.')
       return
     }
-    if (!metaWindow.FB || typeof metaWindow.FB.login !== 'function') {
+    if (!facebookSdkReady || !metaWindow.FB || typeof metaWindow.FB.login !== 'function') {
       setWhatsappOnboardingMessage('El SDK de Meta aún no está listo. Inténtalo de nuevo en unos segundos.')
       return
     }
     setWhatsappOnboardingBusy(true)
     setWhatsappOnboardingMessage('Abriendo Embedded Signup de Meta para WhatsApp Business App + Cloud API Coexistence...')
+    const facebookLoginOptions = {
+      config_id: '2125405738379676',
+      response_type: 'code',
+      override_default_response_type: true,
+      extras: {
+        setup: {},
+        featureType: 'whatsapp_business_app_onboarding',
+        sessionInfoVersion: '3',
+      },
+    }
     metaWindow.FB.login((response: Record<string, unknown>) => {
       const authResponse = response && typeof response === 'object' && 'authResponse' in response ? response.authResponse as { code?: string } : null
       if (!authResponse || !authResponse.code) {
@@ -179,16 +205,7 @@ export function StaffDashboard({ profile, userId, onSignOut }: { profile: StaffP
       }).finally(() => {
         setWhatsappOnboardingBusy(false)
       })
-    }, {
-      config_id: '2125405738379676',
-      response_type: 'code',
-      override_default_response_type: true,
-      extras: {
-        setup: {},
-        featureType: 'whatsapp_business_app_onboarding',
-        sessionInfoVersion: '3',
-      },
-    })
+    }, facebookLoginOptions)
   }
 
   const updateKitchenStatus = async (manualClosed: boolean) => {
@@ -274,7 +291,7 @@ export function StaffDashboard({ profile, userId, onSignOut }: { profile: StaffP
   const displayedDocumentType = member?.document_type ?? 'DNI'; const displayedDocumentNumber = member?.document_number ?? member?.dni ?? '—'
   return <main className="staff-page"><section className="staff-card staff-dashboard"><header className="staff-header"><div><p className="eyebrow">THE BLACK CAT · STAFF</p><h1>Hola, {profile.display_name}</h1><p className="staff-role">Rol detectado: {profile.role}</p></div><button className="back-button staff-signout" type="button" onClick={() => void onSignOut()}>Cerrar sesión</button></header>
     {canManageKitchen && <section className="staff-section kitchen-status-section"><div className="staff-section-title"><div><h2>Estado de Cocina</h2><p>{loadingKitchenStatus ? 'Cargando estado…' : kitchenStatus?.value.manual_closed ? 'Cocina cerrada manualmente' : 'Cocina abierta'}</p></div>{!kitchenStatus?.value.manual_closed && !showKitchenCloseForm && <button type="button" className="staff-danger" disabled={loadingKitchenStatus || savingKitchenStatus} onClick={() => setShowKitchenCloseForm(true)}>Cerrar cocina</button>}{kitchenStatus?.value.manual_closed && <button type="button" className="staff-primary" disabled={savingKitchenStatus} onClick={() => void updateKitchenStatus(false)}>{savingKitchenStatus ? 'Actualizando…' : 'Reabrir cocina'}</button>}</div>{showKitchenCloseForm && <div className="kitchen-close-form"><label>Motivo del cierre <small>Opcional</small><select value={kitchenClosureReason} onChange={(event) => setKitchenClosureReason(event.target.value)}><option value="">Sin motivo público</option>{kitchenClosureReasons.map((reason) => <option key={reason} value={reason}>{reason}</option>)}</select></label><div className="management-actions"><button type="button" className="staff-secondary" disabled={savingKitchenStatus} onClick={() => { setShowKitchenCloseForm(false); setKitchenClosureReason('') }}>Cancelar</button><button type="button" className="staff-danger" disabled={savingKitchenStatus} onClick={() => void updateKitchenStatus(true)}>{savingKitchenStatus ? 'Cerrando…' : 'Confirmar cierre'}</button></div></div>}</section>}
-    {canManageKitchen && <section className="staff-section"><div className="staff-section-title"><div><h2>WhatsApp Business</h2><p>Onboarding administrativo para WhatsApp Business App + Cloud API Coexistence.</p></div></div><div className="management-actions"><button type="button" className="staff-primary" disabled={whatsappOnboardingBusy} onClick={startWhatsAppBusinessCoexistence}>{whatsappOnboardingBusy ? 'Abriendo Meta…' : 'Conectar WhatsApp Business'}</button></div>{whatsappOnboardingMessage && <p className="staff-message" role="status">{whatsappOnboardingMessage}</p>}{whatsappConnection && <div className="staff-summary-card"><strong>WhatsApp Business conectado mediante Coexistence</strong>{whatsappConnection.wabaId && <p>WABA ID: {whatsappConnection.wabaId}</p>}{whatsappConnection.phoneNumberId && <p>Phone Number ID: {whatsappConnection.phoneNumberId}</p>}{whatsappConnection.businessId && <p>Business ID: {whatsappConnection.businessId}</p>}{whatsappConnection.status && <p>Estado: {whatsappConnection.status}</p>}</div>}</section>}
+    {canManageKitchen && <section className="staff-section"><div className="staff-section-title"><div><h2>WhatsApp Business</h2><p>Onboarding administrativo para WhatsApp Business App + Cloud API Coexistence.</p></div></div><div className="management-actions"><button type="button" className="staff-primary" disabled={whatsappOnboardingBusy || !facebookSdkReady} onClick={startWhatsAppBusinessCoexistence}>{whatsappOnboardingBusy ? 'Abriendo Meta…' : 'Conectar WhatsApp Business'}</button></div>{whatsappOnboardingMessage && <p className="staff-message" role="status">{whatsappOnboardingMessage}</p>}{whatsappConnection && <div className="staff-summary-card"><strong>WhatsApp Business conectado mediante Coexistence</strong>{whatsappConnection.wabaId && <p>WABA ID: {whatsappConnection.wabaId}</p>}{whatsappConnection.phoneNumberId && <p>Phone Number ID: {whatsappConnection.phoneNumberId}</p>}{whatsappConnection.businessId && <p>Business ID: {whatsappConnection.businessId}</p>}{whatsappConnection.status && <p>Estado: {whatsappConnection.status}</p>}</div>}</section>}
     {canUseBasicFeatures && <section className="staff-section"><div className="staff-section-title"><div><h2>Buscar socio</h2><p>Buscar por DNI/CE o teléfono</p></div><button type="button" className="staff-secondary" onClick={() => setShowCreate(!showCreate)}>{showCreate ? 'Cancelar' : 'Crear socio'}</button></div><form className="staff-form staff-search-form" onSubmit={searchMember}><label>Número de documento<input inputMode="numeric" maxLength={11} value={documentNumber} onChange={(e) => { setDocumentNumber(e.target.value.replace(/\D/g, '')); setPhone('') }} /></label><span className="staff-or">o</span><label>Teléfono<input inputMode="tel" value={phone} onChange={(e) => { setPhone(e.target.value); setDocumentNumber('') }} /></label><button className="staff-primary" disabled={searching}>{searching ? 'Buscando…' : 'Buscar socio'}</button></form>{showCreate && <form className="staff-form staff-create-form" onSubmit={createMember}><h3>Nuevo socio</h3><label>Nombre completo<input value={newName} onChange={(e) => setNewName(e.target.value)} required /></label><label>Tipo de documento<select value={newDocumentType} onChange={(e) => { setNewDocumentType(e.target.value as 'DNI' | 'CE'); setNewDocumentNumber('') }}><option value="DNI">DNI</option><option value="CE">Carné de Extranjería (CE)</option></select></label><label>Número de documento<input inputMode="numeric" maxLength={newDocumentType === 'DNI' ? 8 : 11} value={newDocumentNumber} onChange={(e) => setNewDocumentNumber(e.target.value.replace(/\D/g, ''))} placeholder={newDocumentType === 'DNI' ? '8 dígitos' : '9 a 11 dígitos'} required /></label><label>Teléfono<input inputMode="tel" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} required /></label><label>Email <small>Opcional</small><input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} /></label><label>Fecha de nacimiento <small>Opcional</small><input type="date" value={newBirthDate} onChange={(e) => setNewBirthDate(e.target.value)} /></label><label className="staff-checkbox"><input type="checkbox" checked={marketingConsent} onChange={(e) => setMarketingConsent(e.target.checked)} /> Acepta recibir comunicaciones</label><button className="staff-primary" disabled={savingMember}>{savingMember ? 'Creando…' : 'Crear socio'}</button></form>}</section>}
     {canManageStaff && <section className="staff-section"><h2>Administrar staff</h2><p>Acceso administrativo confirmado. La gestión de cuentas está restringida al rol Admin.</p></section>}{message && <p className="staff-message" role="status">{message}</p>}{member && <div className="member-workspace"><section className="staff-section member-summary"><div><p className="eyebrow">SOCIO ENCONTRADO</p><h2>{member.full_name}</h2><p>Documento: {displayedDocumentType} {hideDocument(displayedDocumentNumber)} · {member.phone || 'Sin teléfono'}</p><p>Ingreso: {formatDate(member.joined_at)}</p></div><div className="points-panel"><strong>{member.points_balance} / 20</strong><span>puntos</span>{member.points_balance >= 20 ? <b>¡Beneficio disponible!</b> : <small>Te faltan {remaining} puntos para tu beneficio</small>}</div></section>{canManageMembers && <section className="staff-section"><h2>Administración de socio</h2><div className="management-actions"><button type="button" className="staff-secondary" onClick={openMemberEditor}>Editar socio</button>{member.status === 'active' ? <button type="button" className="staff-danger" onClick={() => void updateMemberStatus('blocked')}>Bloquear socio</button> : <button type="button" className="staff-primary" onClick={() => void updateMemberStatus('active')}>Reactivar socio</button>}</div></section>}{editingMember && canManageMembers && <form className="staff-section staff-form staff-management-form" onSubmit={saveMember}><h2>Editar socio</h2><label>Nombre completo<input value={editName} onChange={(event) => setEditName(event.target.value)} required /></label><label>Teléfono<input value={editPhone} onChange={(event) => setEditPhone(event.target.value)} /></label><label>Email<input type="email" value={editEmail} onChange={(event) => setEditEmail(event.target.value)} /></label><div className="management-actions"><button type="button" className="staff-secondary" onClick={() => setEditingMember(false)}>Cancelar</button><button className="staff-primary" disabled={savingMemberUpdate}>{savingMemberUpdate ? 'Guardando…' : 'Guardar cambios'}</button></div></form>}{!canOperate && <p className="staff-warning">Este socio está {member.status}. No se pueden registrar operaciones.</p>}
       <div className="staff-operation-grid"><form className="staff-section staff-form" onSubmit={registerConsumption}><h2>Registrar consumo</h2><label>Monto consumido (S/)<input type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} disabled={!canOperate || savingConsumption} required /></label><div className="staff-receipt-fields"><span>Tipo de comprobante</span><div className="staff-receipt-options"><label><input type="radio" checked={receiptType === 'boleta'} onChange={() => setReceiptType('boleta')} /> Boleta</label><label><input type="radio" checked={receiptType === 'factura'} onChange={() => setReceiptType('factura')} /> Factura</label></div><label>Serie<input value={receiptSeries} onChange={(e) => setReceiptSeries(e.target.value.toUpperCase())} placeholder={receiptType === 'boleta' ? 'B001' : 'F001'} required /></label><label>Número<input inputMode="numeric" value={receiptNumber} onChange={(e) => setReceiptNumber(e.target.value.replace(/\D/g, ''))} required /></label></div><label>Observación <textarea value={consumptionNotes} onChange={(e) => setConsumptionNotes(e.target.value)} /></label><div className="consumption-summary"><span>Socio <strong>{member.full_name}</strong></span><span>Comprobante <strong>{receiptType === 'boleta' ? 'Boleta' : 'Factura'} {receiptSeries || '—'}-{receiptNumber || '—'}</strong></span><span>Monto <strong>{money(Number(amount) || 0)}</strong></span><span>Puntos <strong>{previewPoints}</strong></span></div><p className="staff-preview">Este consumo generará <strong>{previewPoints} puntos</strong>.</p>{Number(amount) >= 300 && <p className="staff-warning">Consumo de monto elevado. Verifique el comprobante antes de continuar.</p>}<button className="staff-primary" disabled={!canOperate || savingConsumption}>{savingConsumption ? 'Registrando…' : 'Confirmar consumo'}</button></form>
