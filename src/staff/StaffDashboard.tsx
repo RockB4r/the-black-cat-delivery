@@ -37,6 +37,7 @@ type MetaWindow = Window & {
 }
 
 const kitchenClosureReasons = ['Alta demanda', 'Falta de personal', 'Problema técnico', 'Cierre anticipado', 'Otro']
+const whatsappEmbeddedSignupRedirectUri = 'https://theblackcatrockbar.com/staff'
 
 export function StaffDashboard({ profile, userId, onSignOut }: { profile: StaffProfile; userId: string; onSignOut: () => Promise<void> }) {
   const [documentNumber, setDocumentNumber] = useState(''); const [phone, setPhone] = useState(''); const [member, setMember] = useState<Member | null>(null)
@@ -159,7 +160,7 @@ export function StaffDashboard({ profile, userId, onSignOut }: { profile: StaffP
       fetch('/.netlify/functions/whatsapp-embedded-signup', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ code: authResponse.code, featureType: 'whatsapp_business_app_onboarding' }),
+        body: JSON.stringify({ code: authResponse.code, featureType: 'whatsapp_business_app_onboarding', redirectUri: whatsappEmbeddedSignupRedirectUri }),
       }).then(async (response) => {
         const result = await response.json() as { ok?: boolean; message?: string; wabaId?: string; phoneNumberId?: string; businessId?: string; status?: string }
         if (!response.ok || !result.ok) {
@@ -183,6 +184,7 @@ export function StaffDashboard({ profile, userId, onSignOut }: { profile: StaffP
       config_id: '2125405738379676',
       response_type: 'code',
       override_default_response_type: true,
+      redirect_uri: whatsappEmbeddedSignupRedirectUri,
       extras: {
         setup: {},
         featureType: 'whatsapp_business_app_onboarding',

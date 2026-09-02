@@ -1,6 +1,7 @@
 import { json } from '../lib/request'
 
 const getGraphApiVersion = () => process.env.META_GRAPH_API_VERSION || 'v25.0'
+const embeddedSignupRedirectUri = 'https://theblackcatrockbar.com/staff'
 
 export default async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') {
@@ -11,6 +12,7 @@ export default async (request: Request): Promise<Response> => {
     const body: unknown = await request.json().catch(() => null)
     const code = typeof body === 'object' && body !== null && 'code' in body && typeof (body as Record<string, unknown>).code === 'string' ? (body as Record<string, unknown>).code.trim() : ''
     const featureType = typeof body === 'object' && body !== null && 'featureType' in body && typeof (body as Record<string, unknown>).featureType === 'string' ? (body as Record<string, unknown>).featureType.trim() : ''
+    const redirectUri = typeof body === 'object' && body !== null && 'redirectUri' in body && typeof (body as Record<string, unknown>).redirectUri === 'string' ? (body as Record<string, unknown>).redirectUri.trim() : ''
 
     if (!code) {
       return json(400, { ok: false, message: 'Falta el authorization code de Meta.' })
@@ -18,6 +20,10 @@ export default async (request: Request): Promise<Response> => {
 
     if (featureType && featureType !== 'whatsapp_business_app_onboarding') {
       return json(400, { ok: false, message: 'Tipo de feature no soportado para este onboarding.' })
+    }
+
+    if (redirectUri !== embeddedSignupRedirectUri) {
+      return json(400, { ok: false, message: 'redirectUri no permitido para este onboarding.' })
     }
 
     const appId = process.env.META_APP_ID
@@ -37,6 +43,7 @@ export default async (request: Request): Promise<Response> => {
     exchangeUrl.searchParams.set('client_id', appId)
     exchangeUrl.searchParams.set('client_secret', appSecret)
     exchangeUrl.searchParams.set('code', code)
+    exchangeUrl.searchParams.set('redirect_uri', redirectUri)
 
     const exchangeResponse = await fetch(exchangeUrl, {
       method: 'GET',
