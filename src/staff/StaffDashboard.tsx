@@ -168,7 +168,6 @@ export function StaffDashboard({ profile, userId, onSignOut }: { profile: StaffP
     setWhatsappOnboardingMessage('Abriendo Embedded Signup de Meta para WhatsApp Business App + Cloud API Coexistence...')
     const facebookLoginOptions = {
       config_id: '1389723399304363',
-      scope: 'whatsapp_business_management,whatsapp_business_messaging',
       response_type: 'code',
       override_default_response_type: true,
       redirect_uri: whatsappEmbeddedSignupRedirectUri,
