@@ -9,9 +9,10 @@ import { KitchenDisplay } from './KitchenDisplay.tsx'
 import { MemberPortal } from './MemberPortal.tsx'
 import { AdminOrdersPortal } from './AdminOrdersPortal.tsx'
 import { MetaWhatsAppCallback } from './MetaWhatsAppCallback.tsx'
+import { MetaPrivacyPolicy } from './MetaPrivacyPolicy.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {window.location.pathname === '/staff' ? <StaffPortal /> : window.location.pathname === '/admin/pedidos' ? <AdminOrdersPortal /> : window.location.pathname === '/kitchen' ? <KitchenDisplay /> : window.location.pathname === '/socios' ? <MemberPortal /> : window.location.pathname === '/libro-de-reclamaciones' ? <ComplaintsBook /> : window.location.pathname === '/terminos-y-condiciones' ? <TermsAndConditions /> : window.location.pathname === '/politica-de-privacidad' ? <PrivacyPolicy /> : window.location.pathname === '/politica-cambios-devoluciones' ? <ReturnsPolicy /> : window.location.pathname === '/meta-whatsapp-callback' ? <MetaWhatsAppCallback /> : <App />}
+    {window.location.pathname === '/staff' ? <StaffPortal /> : window.location.pathname === '/admin/pedidos' ? <AdminOrdersPortal /> : window.location.pathname === '/kitchen' ? <KitchenDisplay /> : window.location.pathname === '/socios' ? <MemberPortal /> : window.location.pathname === '/libro-de-reclamaciones' ? <ComplaintsBook /> : window.location.pathname === '/terminos-y-condiciones' ? <TermsAndConditions /> : window.location.pathname === '/politica-de-privacidad' ? <PrivacyPolicy /> : window.location.pathname === '/politica-cambios-devoluciones' ? <ReturnsPolicy /> : window.location.pathname === '/meta-whatsapp-callback' ? <MetaWhatsAppCallback /> : window.location.pathname === '/privacy' ? <MetaPrivacyPolicy /> : <App />}
   </StrictMode>,
 )
