@@ -81,9 +81,11 @@ footer {
   gap: 10px;
 }
 
-.brand-mark {
-  color: #e94a2e;
-  font-size: 28px;
+.brand-logo {
+  width: auto;
+  height: 40px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .brand strong,
@@ -670,6 +672,7 @@ footer {
     background-image: none;
   }
   .topbar { padding: 14px 18px; min-height: 68px; }
+  .brand-logo { height: 34px; }
   .hero-section { padding: 82px 20px 64px; }
   .hero-copy { font-size: 16px; }
   .menu-preview { padding: 58px 20px 62px; background: rgba(28, 26, 24, 0.82); }

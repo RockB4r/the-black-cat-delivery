@@ -334,7 +334,7 @@ function App() {
     <main className="app-shell">
       <header className="topbar">
         <a className="brand" href="#inicio" aria-label="The Black Cat - inicio">
-          <span className="brand-mark" aria-hidden="true">✦</span>
+          <img className="brand-logo" src="/branding/LogoTBC.png" alt="The Black Cat" />
           <span><strong>THE BLACK CAT</strong><small>ROCK BAR</small></span>
         </a>
         <button className="cart-button" type="button" aria-label="Ver carrito" onClick={() => setIsCartOpen(true)}>
