@@ -19,6 +19,7 @@ export function MemberPortal() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState('')
+  const [showRegistrationSuggestion, setShowRegistrationSuggestion] = useState(false)
 
   const loadSession = async () => {
     try {
@@ -32,7 +33,7 @@ export function MemberPortal() {
   useEffect(() => { void loadSession() }, [])
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault(); setMessage('')
+    event.preventDefault(); setMessage(''); setShowRegistrationSuggestion(false)
     const document = documentNumber.replace(/\D/g, '')
     const phone = phoneLast4.replace(/\D/g, '')
     const validDocument = documentType === 'DNI' ? /^\d{8}$/.test(document) : /^\d{9,11}$/.test(document)
@@ -41,7 +42,7 @@ export function MemberPortal() {
     try {
       const response = await fetch('/.netlify/functions/member-login', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ document_type: documentType, document_number: document, phone_last4: phone }) })
       const result = await response.json() as { authenticated?: boolean; message?: string }
-      if (!response.ok || !result.authenticated) { setMessage(result.message ?? 'No pudimos validar esos datos.'); return }
+      if (!response.ok || !result.authenticated) { setMessage(result.message ?? 'No pudimos validar esos datos.'); setShowRegistrationSuggestion(response.status === 401); return }
       setLoading(true); await loadSession()
     } catch { setMessage('No pudimos conectar con la consulta de puntos.') } finally { setSubmitting(false) }
   }
@@ -52,7 +53,7 @@ export function MemberPortal() {
   }
 
   if (loading) return <main className="app-shell member-portal-page"><p className="member-loading">Cargando tu portal de socios...</p></main>
-  return <main className="app-shell member-portal-page"><header className="topbar"><a className="brand" href="/" aria-label="Volver a The Black Cat"><span className="brand-mark" aria-hidden="true">✦</span><span><strong>THE BLACK CAT</strong><small>ROCK BAR</small></span></a></header><section className="member-portal-content">{member ? <MemberDashboard member={member} consumptions={consumptions} activities={activities} onLogout={logout} /> : <section className="member-login-card"><p className="eyebrow">BLACK CAT MEMBER</p><h1>Consulta tus puntos</h1><p>Ingresa tus datos para conocer tu saldo y actividad reciente.</p><form onSubmit={submit}><label>Tipo de documento<select value={documentType} onChange={(event) => { setDocumentType(event.target.value as 'DNI' | 'CE'); setDocumentNumber('') }}><option value="DNI">DNI</option><option value="CE">Carné de Extranjería (CE)</option></select></label><label>Número de documento<input inputMode="numeric" maxLength={documentType === 'DNI' ? 8 : 11} value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value.replace(/\D/g, ''))} placeholder={documentType === 'DNI' ? '8 dígitos' : '9 a 11 dígitos'} required /></label><label>Últimos 4 dígitos de tu celular<input inputMode="numeric" maxLength={4} value={phoneLast4} onChange={(event) => setPhoneLast4(event.target.value.replace(/\D/g, ''))} placeholder="1234" required /></label>{message && <p className="member-message" role="alert">{message}</p>}<button className="checkout-button" disabled={submitting}>{submitting ? 'Consultando...' : 'Consultar mis puntos'}</button></form></section>}</section><footer><span>THE BLACK CAT · ROCK BAR</span><div className="footer-links"><a href="/">Pedir delivery</a><a href="/libro-de-reclamaciones">Libro de Reclamaciones</a></div><span>Black Cat Member</span></footer></main>
+  return <main className="app-shell member-portal-page"><header className="topbar"><a className="brand" href="/" aria-label="Volver a The Black Cat"><span className="brand-mark" aria-hidden="true">✦</span><span><strong>THE BLACK CAT</strong><small>ROCK BAR</small></span></a></header><section className="member-portal-content">{member ? <MemberDashboard member={member} consumptions={consumptions} activities={activities} onLogout={logout} /> : <section className="member-login-card"><p className="eyebrow">BLACK CAT MEMBER</p><h1>Consulta tus puntos</h1><p>Ingresa tus datos para conocer tu saldo y actividad reciente.</p><form onSubmit={submit}><label>Tipo de documento<select value={documentType} onChange={(event) => { setDocumentType(event.target.value as 'DNI' | 'CE'); setDocumentNumber('') }}><option value="DNI">DNI</option><option value="CE">Carné de Extranjería (CE)</option></select></label><label>Número de documento<input inputMode="numeric" maxLength={documentType === 'DNI' ? 8 : 11} value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value.replace(/\D/g, ''))} placeholder={documentType === 'DNI' ? '8 dígitos' : '9 a 11 dígitos'} required /></label><label>Últimos 4 dígitos de tu celular<input inputMode="numeric" maxLength={4} value={phoneLast4} onChange={(event) => setPhoneLast4(event.target.value.replace(/\D/g, ''))} placeholder="1234" required /></label>{message && <p className="member-message" role="alert">{message}</p>}{showRegistrationSuggestion && <div className="member-registration-suggestion"><p>No encontramos una membresía con esos datos. Hazte Socio y empieza a acumular puntos.</p><a className="checkout-button" href="/socios/registro">Hazte Socio</a></div>}<button className="checkout-button" disabled={submitting}>{submitting ? 'Consultando...' : 'Consultar mis puntos'}</button></form></section>}</section><footer><span>THE BLACK CAT · ROCK BAR</span><div className="footer-links"><a href="/">Pedir delivery</a><a href="/libro-de-reclamaciones">Libro de Reclamaciones</a></div><span>Black Cat Member</span></footer></main>
 }
 
 function MemberDashboard({ member, consumptions, activities, onLogout }: { member: MemberData; consumptions: Consumption[]; activities: Activity[]; onLogout: () => void }) {

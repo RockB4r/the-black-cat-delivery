@@ -5,6 +5,7 @@ export const memberSessionCookie = 'tbc_member_session'
 const sessionLifetimeSeconds = 30 * 60
 const sessions = () => getStore({ name: 'the-black-cat-member-sessions', consistency: 'strong' })
 const attempts = () => getStore({ name: 'the-black-cat-member-login-limits', consistency: 'strong' })
+const registrations = () => getStore({ name: 'the-black-cat-member-registration-limits', consistency: 'strong' })
 
 type MemberSession = { memberId: string; expiresAt: string }
 type LoginAttempt = { count: number; resetAt: number }
@@ -13,6 +14,11 @@ export const serverHeaders = (key: string, extra: Record<string, string> = {}) =
 
 export const normalizePhone = (phone: string | null | undefined) => (phone ?? '').replace(/\D/g, '')
 export const normalizeDocument = (document: string | null | undefined) => (document ?? '').trim().replace(/\D/g, '')
+export const normalizePeruvianPhone = (phone: string | null | undefined) => {
+  const normalized = normalizePhone(phone)
+  if (/^51\d{9}$/.test(normalized)) return normalized.slice(2)
+  return /^9\d{8}$/.test(normalized) ? normalized : ''
+}
 
 export const getCookie = (request: Request, name: string) => {
   const value = request.headers.get('cookie')?.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1)
@@ -64,3 +70,18 @@ export const recordFailedLogin = async (key: string) => {
 }
 
 export const clearLoginLimit = async (key: string) => attempts().delete(key)
+
+export const checkRegistrationLimit = async (request: Request) => {
+  const key = attemptKey(request)
+  const attempt = await registrations().get(key, { type: 'json' }) as LoginAttempt | null
+  if (!attempt || attempt.resetAt <= Date.now()) return { allowed: true, key }
+  return { allowed: attempt.count < 5, key, retryAfter: Math.ceil((attempt.resetAt - Date.now()) / 1000) }
+}
+
+export const recordFailedRegistration = async (key: string) => {
+  const current = await registrations().get(key, { type: 'json' }) as LoginAttempt | null
+  const active = current && current.resetAt > Date.now() ? current : { count: 0, resetAt: Date.now() + 15 * 60 * 1000 }
+  await registrations().setJSON(key, { ...active, count: active.count + 1 })
+}
+
+export const clearRegistrationLimit = async (key: string) => registrations().delete(key)

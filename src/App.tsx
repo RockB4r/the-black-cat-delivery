@@ -349,7 +349,7 @@ function App() {
         {!orderingOpen && <p className="ordering-closed" role="status"><strong>{manualKitchenClosed ? 'Cocina cerrada temporalmente' : 'Cocina Cerrada'}</strong><span>{manualKitchenClosed ? 'Intenta nuevamente más tarde.' : `Nuestro horario de atención online es: ${onlineOrderingHours.display}`}</span></p>}
         <a className="primary-action" href="#menu">Ver el menú <span aria-hidden="true">↓</span></a>
         <div className="service-pills"><span>🛵 Delivery</span><span>✦ Recojo en el bar</span></div>
-        <a className="member-home-link" href="/socios"><strong>¿Ya eres Black Cat Member?</strong><span>Consulta tus puntos aquí →</span></a>
+        <div className="member-home-actions"><a className="member-home-link" href="/socios"><strong>¿Ya eres Black Cat Member?</strong><span>Consulta tus puntos aquí →</span></a><a className="member-signup-link" href="/socios/registro">Hazte Socio</a></div>
       </section>
 
       <section className="menu-preview" id="menu" aria-labelledby="menu-title">
