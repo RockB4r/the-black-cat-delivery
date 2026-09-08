@@ -45,6 +45,8 @@ export function StaffDashboard({ profile, userId, onSignOut }: { profile: StaffP
   const [documentNumber, setDocumentNumber] = useState(''); const [phone, setPhone] = useState(''); const [member, setMember] = useState<Member | null>(null)
   const [movements, setMovements] = useState<PointMovement[]>([]); const [consumptions, setConsumptions] = useState<Consumption[]>([]); const [staffNames, setStaffNames] = useState<Record<string, string>>({})
   const [message, setMessage] = useState(''); const [searching, setSearching] = useState(false); const [showCreate, setShowCreate] = useState(false); const [savingMember, setSavingMember] = useState(false)
+  const [exportingMembers, setExportingMembers] = useState(false)
+  const [exportMessage, setExportMessage] = useState('')
   const [newName, setNewName] = useState(''); const [newDocumentType, setNewDocumentType] = useState<'DNI' | 'CE'>('DNI'); const [newDocumentNumber, setNewDocumentNumber] = useState(''); const [newPhone, setNewPhone] = useState(''); const [newEmail, setNewEmail] = useState(''); const [newBirthDate, setNewBirthDate] = useState(''); const [marketingConsent, setMarketingConsent] = useState(false)
   const [amount, setAmount] = useState(''); const [receiptType, setReceiptType] = useState<ReceiptType>('boleta'); const [receiptSeries, setReceiptSeries] = useState(''); const [receiptNumber, setReceiptNumber] = useState(''); const [consumptionNotes, setConsumptionNotes] = useState(''); const [savingConsumption, setSavingConsumption] = useState(false)
   const [savingRedemption, setSavingRedemption] = useState(false); const [rewardCategory, setRewardCategory] = useState<RewardCategory>('craft_beer'); const [rewardProductName, setRewardProductName] = useState('')
@@ -69,6 +71,35 @@ export function StaffDashboard({ profile, userId, onSignOut }: { profile: StaffP
   const canManageMembers = isAdmin
   const canManageStaff = isAdmin
   const canManageKitchen = isManager || isAdmin
+
+  const exportMembers = async () => {
+    if (!isAdmin || exportingMembers) return
+    setExportingMembers(true); setExportMessage('')
+    try {
+      const { data, error } = await supabase.auth.getSession()
+      if (error || !data.session) throw new Error('Vuelve a iniciar sesión para exportar socios.')
+      const response = await fetch('/.netlify/functions/export-members', {
+        headers: { Authorization: `Bearer ${data.session.access_token}` }, cache: 'no-store',
+      })
+      if (!response.ok) {
+        const result = await response.json().catch(() => null) as { message?: string } | null
+        throw new Error(result?.message || 'No se pudo exportar la lista de socios.')
+      }
+      const downloadUrl = URL.createObjectURL(await response.blob())
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = response.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1] || 'socios-black-cat.xlsx'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 30_000)
+      setExportMessage('Archivo Excel generado. Revisa tus descargas.')
+    } catch (error) {
+      setExportMessage(error instanceof Error ? error.message : 'No se pudo exportar la lista de socios.')
+    } finally {
+      setExportingMembers(false)
+    }
+  }
 
   const loadKitchenStatus = useCallback(async () => {
     if (!canManageKitchen) return
@@ -299,6 +330,7 @@ export function StaffDashboard({ profile, userId, onSignOut }: { profile: StaffP
   const canOperate = member?.status === 'active'; const previewPoints = earned(Number(amount) || 0); const remaining = member ? Math.max(0, 20 - member.points_balance) : 20; const correctionPoints = earned(Number(correctionAmount) || 0); const correctionDelta = correcting ? correctionPoints - earned(correcting.amount) : 0
   const displayedDocumentType = member?.document_type ?? 'DNI'; const displayedDocumentNumber = member?.document_number ?? member?.dni ?? '—'
   return <main className="staff-page"><section className="staff-card staff-dashboard"><header className="staff-header"><div><p className="eyebrow">THE BLACK CAT · STAFF</p><h1>Hola, {profile.display_name}</h1><p className="staff-role">Rol detectado: {profile.role}</p></div><button className="back-button staff-signout" type="button" onClick={() => void onSignOut()}>Cerrar sesión</button></header>
+    {isAdmin && <section className="staff-section"><h2>Exportar socios</h2><p>Descarga los datos de contacto, documentos, fechas, puntos, estado y consentimiento de los socios del Club Black Cat.</p><button type="button" className="staff-primary" disabled={exportingMembers} onClick={() => void exportMembers()}>{exportingMembers ? 'Generando Excel…' : 'Exportar socios a Excel'}</button>{exportMessage && <p className="staff-message" role="status">{exportMessage}</p>}</section>}
     {canManageKitchen && <section className="staff-section kitchen-status-section"><div className="staff-section-title"><div><h2>Estado de Cocina</h2><p>{loadingKitchenStatus ? 'Cargando estado…' : kitchenStateLabel}</p></div>{!kitchenStatus?.value.manual_closed && !showKitchenCloseForm && <button type="button" className="staff-danger" disabled={loadingKitchenStatus || savingKitchenStatus} onClick={() => setShowKitchenCloseForm(true)}>Cerrar cocina</button>}{(kitchenStatus?.value.manual_closed || (!kitchenStatus?.value.force_open && !scheduleOpen)) && <button type="button" className="staff-primary" disabled={savingKitchenStatus} onClick={() => void updateKitchenStatus(false)}>{savingKitchenStatus ? 'Actualizando…' : 'Abrir cocina manualmente'}</button>}{(kitchenStatus?.value.manual_closed || kitchenStatus?.value.force_open) && <button type="button" className="staff-secondary" disabled={loadingKitchenStatus || savingKitchenStatus} onClick={() => void updateKitchenStatus(false, false)}>Volver a horario automático</button>}</div>{showKitchenCloseForm && <div className="kitchen-close-form"><label>Motivo del cierre <small>Opcional</small><select value={kitchenClosureReason} onChange={(event) => setKitchenClosureReason(event.target.value)}><option value="">Sin motivo público</option>{kitchenClosureReasons.map((reason) => <option key={reason} value={reason}>{reason}</option>)}</select></label><div className="management-actions"><button type="button" className="staff-secondary" disabled={savingKitchenStatus} onClick={() => { setShowKitchenCloseForm(false); setKitchenClosureReason('') }}>Cancelar</button><button type="button" className="staff-danger" disabled={savingKitchenStatus} onClick={() => void updateKitchenStatus(true)}>{savingKitchenStatus ? 'Cerrando…' : 'Confirmar cierre'}</button></div></div>}</section>}
     {canManageKitchen && <section className="staff-section"><div className="staff-section-title"><div><h2>WhatsApp Business</h2><p>Onboarding administrativo para WhatsApp Business App + Cloud API Coexistence.</p></div></div><div className="management-actions"><button type="button" className="staff-primary" disabled={whatsappOnboardingBusy || !facebookSdkReady} onClick={startWhatsAppBusinessCoexistence}>{whatsappOnboardingBusy ? 'Abriendo Meta…' : 'Conectar WhatsApp Business'}</button></div>{whatsappOnboardingMessage && <p className="staff-message" role="status">{whatsappOnboardingMessage}</p>}{whatsappConnection && <div className="staff-summary-card"><strong>WhatsApp Business conectado mediante Coexistence</strong>{whatsappConnection.wabaId && <p>WABA ID: {whatsappConnection.wabaId}</p>}{whatsappConnection.phoneNumberId && <p>Phone Number ID: {whatsappConnection.phoneNumberId}</p>}{whatsappConnection.businessId && <p>Business ID: {whatsappConnection.businessId}</p>}{whatsappConnection.status && <p>Estado: {whatsappConnection.status}</p>}</div>}</section>}
     {canUseBasicFeatures && <section className="staff-section"><div className="staff-section-title"><div><h2>Buscar socio</h2><p>Buscar por DNI/CE o teléfono</p></div><button type="button" className="staff-secondary" onClick={() => setShowCreate(!showCreate)}>{showCreate ? 'Cancelar' : 'Crear socio'}</button></div><form className="staff-form staff-search-form" onSubmit={searchMember}><label>Número de documento<input inputMode="numeric" maxLength={11} value={documentNumber} onChange={(e) => { setDocumentNumber(e.target.value.replace(/\D/g, '')); setPhone('') }} /></label><span className="staff-or">o</span><label>Teléfono<input inputMode="tel" value={phone} onChange={(e) => { setPhone(e.target.value); setDocumentNumber('') }} /></label><button className="staff-primary" disabled={searching}>{searching ? 'Buscando…' : 'Buscar socio'}</button></form>{showCreate && <form className="staff-form staff-create-form" onSubmit={createMember}><h3>Nuevo socio</h3><label>Nombre completo<input value={newName} onChange={(e) => setNewName(e.target.value)} required /></label><label>Tipo de documento<select value={newDocumentType} onChange={(e) => { setNewDocumentType(e.target.value as 'DNI' | 'CE'); setNewDocumentNumber('') }}><option value="DNI">DNI</option><option value="CE">Carné de Extranjería (CE)</option></select></label><label>Número de documento<input inputMode="numeric" maxLength={newDocumentType === 'DNI' ? 8 : 11} value={newDocumentNumber} onChange={(e) => setNewDocumentNumber(e.target.value.replace(/\D/g, ''))} placeholder={newDocumentType === 'DNI' ? '8 dígitos' : '9 a 11 dígitos'} required /></label><label>Teléfono<input inputMode="tel" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} required /></label><label>Email <small>Opcional</small><input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} /></label><label>Fecha de nacimiento <small>Opcional</small><input type="date" value={newBirthDate} onChange={(e) => setNewBirthDate(e.target.value)} /></label><label className="staff-checkbox"><input type="checkbox" checked={marketingConsent} onChange={(e) => setMarketingConsent(e.target.checked)} /> Acepta recibir comunicaciones</label><button className="staff-primary" disabled={savingMember}>{savingMember ? 'Creando…' : 'Crear socio'}</button></form>}</section>}
