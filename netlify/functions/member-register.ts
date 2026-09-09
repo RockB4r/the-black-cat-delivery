@@ -1,5 +1,6 @@
 import { checkRegistrationLimit, clearRegistrationLimit, normalizeDocument, normalizePeruvianPhone, recordFailedRegistration, serverHeaders } from '../lib/member-portal'
 import { json } from '../lib/request'
+import { sendMemberPromotionEmail } from '../lib/member-promotions'
 
 type MemberCandidate = {
   id: string
@@ -72,7 +73,7 @@ export default async (request: Request): Promise<Response> => {
 
     const insertResponse = await fetch(new URL('/rest/v1/members', url), {
       method: 'POST',
-      headers: serverHeaders(key, { Prefer: 'return=minimal' }),
+      headers: serverHeaders(key, { Prefer: 'return=representation' }),
       body: JSON.stringify({
         document_type: documentType,
         document_number: documentNumber,
@@ -86,14 +87,19 @@ export default async (request: Request): Promise<Response> => {
         marketing_consent_at: marketingConsent ? new Date().toISOString() : null,
       }),
     })
+    const inserted: unknown = await insertResponse.json().catch(() => null)
     if (!insertResponse.ok) {
-      const error = await insertResponse.json().catch(() => null) as { code?: string } | null
+      const error = inserted as { code?: string } | null
       if (error?.code === '23505') return json(409, { duplicate: true, message: duplicateMessage })
       throw new Error('Member creation failed.')
     }
 
+    const memberId = Array.isArray(inserted) && inserted[0] && typeof inserted[0] === 'object' && typeof (inserted[0] as { id?: unknown }).id === 'string' ? (inserted[0] as { id: string }).id : ''
+    if (!memberId) throw new Error('Member creation did not return an identifier.')
+    let welcomeEmailSent = false
+    try { welcomeEmailSent = await sendMemberPromotionEmail(memberId, 'welcome') === 'sent' } catch (error) { console.error('Welcome promotion email failed:', error instanceof Error ? error.message : 'unknown') }
     await clearRegistrationLimit(limit.key)
-    return json(201, { created: true })
+    return json(201, { created: true, welcomeEmailSent })
   } catch (error) {
     console.error('Member registration failed:', error instanceof Error ? error.message : 'unknown error')
     return json(500, { message: 'No pudimos crear tu membresía. Inténtalo nuevamente.' })

@@ -18,6 +18,8 @@ export function PromotionManagement() {
   const [expiresAt, setExpiresAt] = useState(() => datetimeInput(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)))
   const [maxUsesPerCustomer, setMaxUsesPerCustomer] = useState('2')
   const [activateNow, setActivateNow] = useState(false)
+  const [vipEmail, setVipEmail] = useState('')
+  const [sendingVip, setSendingVip] = useState(false)
 
   const request = useCallback(async (path = '', init?: RequestInit) => {
     const { data } = await supabase.auth.getSession()
@@ -46,9 +48,18 @@ export function PromotionManagement() {
     const status = promotion.status === 'active' ? 'paused' : 'active'
     try { await request('', { method: 'PATCH', body: JSON.stringify({ id: promotion.id, status }) }); await load() } catch (error) { setMessage(error instanceof Error ? error.message : 'No fue posible actualizar el código.') }
   }
+  const createVipPromotion = async (event: React.FormEvent) => {
+    event.preventDefault(); setSendingVip(true); setMessage('')
+    try {
+      const result = await request('', { method: 'POST', body: JSON.stringify({ action: 'create_vip', memberEmail: vipEmail }) }) as { sent?: boolean; message?: string }
+      setMessage(result.sent ? 'Código VIP de 15% creado y enviado por email.' : result.message || 'Código VIP creado; revisa el estado del correo.')
+      setVipEmail(''); await load()
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'No fue posible crear el beneficio VIP.') } finally { setSendingVip(false) }
+  }
 
   return <section className="staff-section promotion-management"><div className="staff-section-title"><div><h2>Códigos de descuento</h2><p>Crea campañas por porcentaje, con mínimo de compra, vigencia y límite de usos por cliente.</p></div></div>
     <form className="staff-form promotion-admin-form" onSubmit={(event) => void createPromotion(event)}><label>Código<input value={code} onChange={(event) => setCode(event.target.value.toUpperCase().replace(/\s+/g, ''))} placeholder="ROCK10" maxLength={32} pattern="[A-Za-z0-9_-]{3,32}" required /></label><label>Descuento (%)<input type="number" min="1" max="100" value={discountPercent} onChange={(event) => setDiscountPercent(event.target.value)} required /></label><label>Compra mínima (S/)<input type="number" min="0" step="0.01" value={minimumSubtotal} onChange={(event) => setMinimumSubtotal(event.target.value)} required /></label><label>Inicio<input type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} required /></label><label>Vencimiento<input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} required /></label><label>Usos máximos por cliente<input type="number" min="1" value={maxUsesPerCustomer} onChange={(event) => setMaxUsesPerCustomer(event.target.value)} required /></label><label className="staff-checkbox"><input type="checkbox" checked={activateNow} onChange={(event) => setActivateNow(event.target.checked)} /> Activar ahora</label><button className="staff-primary" disabled={saving}>{saving ? 'Guardando…' : 'Crear código'}</button></form>
+    <form className="staff-form vip-promotion-form" onSubmit={(event) => void createVipPromotion(event)}><div><h3>Beneficio VIP</h3><p>Genera un código personal de 15%, mínimo S/30, un solo uso y vigencia de 30 días.</p></div><label>Correo del socio VIP<input type="email" value={vipEmail} onChange={(event) => setVipEmail(event.target.value)} placeholder="socio@email.com" required /></label><button className="staff-primary" disabled={sendingVip}>{sendingVip ? 'Enviando…' : 'Crear y enviar VIP'}</button></form>
     {message && <p className="staff-message" role="status">{message}</p>}
     {loading ? <p>Cargando códigos…</p> : promotions.length === 0 ? <p>Aún no hay códigos creados.</p> : <ul className="promotion-list">{promotions.map((promotion) => <li key={promotion.id}><div><strong>{promotion.code}</strong><span>{promotion.discount_percent}% · mínimo S/ {Number(promotion.minimum_subtotal).toFixed(2)} · {promotion.max_uses_per_customer} usos por cliente</span><small>{formatDate(promotion.starts_at)} — {formatDate(promotion.expires_at)}</small></div><button type="button" className={promotion.status === 'active' ? 'staff-danger' : 'staff-primary'} onClick={() => void changeStatus(promotion)}>{promotion.status === 'active' ? 'Pausar' : 'Activar'}</button></li>)}</ul>}
   </section>

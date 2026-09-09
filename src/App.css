@@ -652,6 +652,7 @@ footer {
 .ordering-closed { display: inline-grid; gap: 4px; margin: 20px 0 0; padding: 12px 16px; border: 1px solid rgba(233,111,88,.7); border-radius: 4px; color: #fff0e8; background: rgba(104,34,24,.62); text-align: left; }.ordering-closed strong { color: #ffb29d; }.ordering-closed span { color: #f5d3c7; font-size: 14px; }.checkout-closed { display: grid; margin: 0; }
 .promotion-fieldset { display: grid; gap: 12px; }.promotion-help { margin: 0; color: #c9c0b3; font-size: 14px; line-height: 1.45; }.promotion-code-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }.promotion-code-row input { min-width: 0; text-transform: uppercase; }.promotion-code-row button { white-space: nowrap; }.promotion-applied { margin: 0; padding: 10px 12px; border-left: 3px solid #f7bd3a; color: #fff7e8; background: rgba(247,189,58,.11); font-size: 14px; }.promotion-applied strong { color: #f7bd3a; }.checkout-discount { display: flex; justify-content: space-between; gap: 14px; padding: 8px 0; color: #f7bd3a; font-size: 14px; font-weight: 800; }.checkout-grand-total { margin-top: 2px; padding-top: 13px; border-top: 1px solid rgba(255,246,230,.16); }.order-success-discount { display: block; margin-top: -10px; color: #f7bd3a; font-weight: 800; }
 .promotion-admin-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }.promotion-admin-form > button { align-self: end; }.promotion-list { display: grid; gap: 10px; margin: 18px 0 0; padding: 0; list-style: none; }.promotion-list li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px; border: 1px solid rgba(255,246,230,.13); border-radius: 5px; background: rgba(255,255,255,.035); }.promotion-list li > div { display: grid; gap: 4px; }.promotion-list strong { color: #f7bd3a; font-size: 17px; }.promotion-list span { color: #fff7e8; font-size: 14px; }.promotion-list small { color: #a89e91; }
+.vip-promotion-form { grid-template-columns: minmax(0, 1fr) minmax(220px, .8fr) auto; align-items: end; margin-top: 18px; padding-top: 18px; border-top: 1px solid rgba(255,246,230,.14); }.vip-promotion-form h3, .vip-promotion-form p { margin: 0; }.vip-promotion-form h3 { color: #f7bd3a; }.vip-promotion-form p { margin-top: 6px; color: #c9c0b3; font-size: 14px; line-height: 1.4; }
 
 .kitchen-page { min-height: 100svh; padding: 32px; color: #fff7e8; background: rgba(17, 16, 15, .9); }
 .kitchen-login-page { display: grid; place-items: center; padding: 24px; }
@@ -708,6 +709,7 @@ footer {
   .cart-drawer { padding: 22px 18px; }
   .promotion-code-row { grid-template-columns: 1fr; }.promotion-code-row button { width: 100%; }
   .promotion-admin-form { grid-template-columns: 1fr; }.promotion-list li { align-items: stretch; flex-direction: column; }.promotion-list button { width: 100%; }
+  .vip-promotion-form { grid-template-columns: 1fr; }
   .staff-card { padding: 26px 20px; }
   .staff-actions { grid-template-columns: 1fr; }
   .staff-search-form, .staff-operation-grid { grid-template-columns: 1fr; }
