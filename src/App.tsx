@@ -18,7 +18,11 @@ type SubmittedOrder = {
   paymentMethod: string
   items: CartItem[]
   subtotal: number
+  discountCode?: string
+  discountAmount: number
+  total: number
 }
+type AppliedPromotion = { code: string; discountPercent: number; minimumSubtotal: number; discountAmount: number; total: number; reservedUntil: string }
 type CulqiChargeResponse = {
   approved: boolean
   message?: string
@@ -34,6 +38,7 @@ type OrderRequestResponse = {
   message?: string
   code?: string
   unavailable_products?: string[]
+  amountInCents?: number
 }
 const menuCategories = menuData as MenuCategory[]
 
@@ -51,11 +56,15 @@ function App() {
   const [selectedStyle, setSelectedStyle] = useState('')
   const [selectedSauce, setSelectedSauce] = useState('')
   const [customerEmail, setCustomerEmail] = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
   const [receiptType, setReceiptType] = useState<'boleta' | 'factura'>('boleta')
   const [dni, setDni] = useState('')
   const [ruc, setRuc] = useState('')
   const [culqiMessage, setCulqiMessage] = useState('')
   const [isProcessingPayment, setIsProcessingPayment] = useState(false)
+  const [promotionCode, setPromotionCode] = useState('')
+  const [appliedPromotion, setAppliedPromotion] = useState<AppliedPromotion | null>(null)
+  const [isApplyingPromotion, setIsApplyingPromotion] = useState(false)
   const [scheduleOpen, setScheduleOpen] = useState(() => isOnlineOrderingOpen())
   const [manualKitchenClosed, setManualKitchenClosed] = useState(false)
   const [forceKitchenOpen, setForceKitchenOpen] = useState(false)
@@ -67,9 +76,11 @@ function App() {
   const isCraftBeerCategory = activeCategory.id === 'cervezas-artesanales'
   const itemCount = cartItems.reduce((total, item) => total + item.quantity, 0)
   const subtotal = useMemo(() => cartItems.reduce((total, item) => total + item.price * item.quantity, 0), [cartItems])
+  const discountAmount = appliedPromotion?.discountAmount ?? 0
+  const totalAfterDiscount = appliedPromotion?.total ?? subtotal
   const unavailableCartItems = useMemo(() => cartItems.filter((item) => productAvailability[item.productKey] === false), [cartItems, productAvailability])
   const hasValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim())
-  const canPayWithCulqi = cartItems.length > 0 && subtotal > 0 && hasValidEmail
+  const canPayWithCulqi = cartItems.length > 0 && totalAfterDiscount > 0 && hasValidEmail
   const isCashPayment = paymentMethod === 'Efectivo'
   const culqiPublicKey = import.meta.env.VITE_CULQI_PUBLIC_KEY
   const orderingOpen = !manualKitchenClosed && (scheduleOpen || forceKitchenOpen)
@@ -94,6 +105,10 @@ function App() {
     const timer = window.setInterval(refresh, 30_000)
     return () => window.clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    setAppliedPromotion(null)
+  }, [subtotal, customerEmail, customerPhone])
 
   useEffect(() => {
     if (!isSupabaseConfigured) return
@@ -171,6 +186,7 @@ function App() {
       receiptType,
       ...(receiptType === 'boleta' && dni ? { dni } : {}),
       ...(receiptType === 'factura' ? { ruc } : {}),
+      ...(appliedPromotion ? { promotionCode: appliedPromotion.code } : {}),
       items: cartItems.map(({ name, quantity, note, style, sauce }) => ({ name, quantity, note, style, sauce })),
     }
   }
@@ -216,6 +232,40 @@ function App() {
     setIsOrderSubmitted(false)
     checkoutIdRef.current = crypto.randomUUID()
     internalOrderIdRef.current = null
+    setPromotionCode('')
+    setAppliedPromotion(null)
+  }
+
+  const applyPromotion = async () => {
+    const order = getOrderPayload()
+    const code = promotionCode.trim().toUpperCase().replace(/\s+/g, '')
+    if (!order || !code) {
+      setCulqiMessage('Ingresa un código y completa los datos requeridos para validarlo.')
+      return
+    }
+    setIsApplyingPromotion(true)
+    setCulqiMessage('')
+    try {
+      const response = await fetch('/.netlify/functions/apply-promotion', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...order, promotionCode: code }),
+      })
+      const result = await response.json() as Partial<AppliedPromotion> & { message?: string }
+      if (!response.ok || typeof result.code !== 'string' || typeof result.discountAmount !== 'number' || typeof result.total !== 'number' || typeof result.discountPercent !== 'number' || typeof result.minimumSubtotal !== 'number' || typeof result.reservedUntil !== 'string') {
+        setAppliedPromotion(null)
+        setCulqiMessage(result.message ?? 'No fue posible aplicar el código.')
+        return
+      }
+      setPromotionCode(result.code)
+      setAppliedPromotion(result as AppliedPromotion)
+      setCulqiMessage(`Código ${result.code} aplicado: ${result.discountPercent}% de descuento.`)
+    } catch {
+      setAppliedPromotion(null)
+      setCulqiMessage('No fue posible validar el código. Inténtalo nuevamente.')
+    } finally {
+      setIsApplyingPromotion(false)
+    }
   }
 
   const handleCulqiAction = async (culqi: CulqiCheckoutInstance) => {
@@ -233,7 +283,7 @@ function App() {
           body: JSON.stringify({
             token: culqi.token.id,
             internalOrderId: internalOrderIdRef.current,
-            amount: Math.round(subtotal * 100),
+            amount: Math.round(totalAfterDiscount * 100),
             currency: 'PEN',
             ...order,
             email: order.email,
@@ -283,19 +333,20 @@ function App() {
     }
 
     setCulqiMessage('')
-    const amountInCents = Math.round(subtotal * 100)
+    let amountInCents = Math.round(totalAfterDiscount * 100)
     let backendOrderId: string | undefined
     {
       setIsProcessingPayment(true)
       try {
         const response = await fetch('/.netlify/functions/create-culqi-order', {
           method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ ...orderPayload, amount: amountInCents, currency: 'PEN' }),
+        body: JSON.stringify({ ...orderPayload, currency: 'PEN' }),
         })
         const result = await response.json() as OrderRequestResponse
         if (!response.ok || !result.internalOrderId || !result.orderId || !result.culqiOrderId) { setCulqiMessage(orderErrorMessage(result, 'No fue posible generar la orden de pago.')); return }
         internalOrderIdRef.current = result.internalOrderId
         backendOrderId = result.culqiOrderId
+        if (typeof result.amountInCents === 'number' && Number.isSafeInteger(result.amountInCents) && result.amountInCents > 0) amountInCents = result.amountInCents
         setCulqiMessage(`Pago en proceso de confirmación · Pedido: ${result.orderId}`)
       } catch { setCulqiMessage('No fue posible conectar con el servicio de pago.'); return } finally { setIsProcessingPayment(false) }
     }
@@ -327,7 +378,9 @@ function App() {
       appearance: { theme: 'default', menuType: 'sliderTop' },
     })
 
-    culqi.culqi = () => { void handleCulqiAction(culqi) }
+    culqi.culqi = () => {
+      handleCulqiAction(culqi)
+    }
     culqi.open()
   }
   return (
@@ -388,7 +441,14 @@ function App() {
               <h3>{item.name}</h3>
               <div className="product-footer">
                 <p className="price">{item.styles ? `Desde S/ ${Math.min(...item.styles.map((style) => style.price)).toFixed(2)}` : `S/ ${item.price.toFixed(2)}`}</p>
-                <button className="add-button" type="button" disabled={!isAvailable} onClick={(event) => { event.stopPropagation(); item.styles || item.sauces ? openProductModal(item) : addToCart(item) }}>{isAvailable ? item.styles || item.sauces ? 'Escoger' : 'Añadir' : 'Agotado'} <span aria-hidden="true">＋</span></button>
+                <button className="add-button" type="button" disabled={!isAvailable} onClick={(event) => {
+                  event.stopPropagation()
+                  if (item.styles || item.sauces) {
+                    openProductModal(item)
+                    return
+                  }
+                  addToCart(item)
+                }}>{isAvailable ? item.styles || item.sauces ? 'Escoger' : 'Añadir' : 'Agotado'} <span aria-hidden="true">＋</span></button>
               </div>
             </article>
           })}
@@ -494,7 +554,8 @@ function App() {
                 <h3>¡Gracias por tu pedido!</h3>
                 <p>Tu pedido fue recibido por The Black Cat. La tienda fue notificada automáticamente.</p>
                 {submittedOrder?.orderId && <strong>Código de pedido: {submittedOrder.orderId}</strong>}
-                <strong>Total de productos: S/ {submittedOrder?.subtotal.toFixed(2)}</strong>
+                <strong>Total de productos: S/ {submittedOrder?.total.toFixed(2)}</strong>
+                {submittedOrder?.discountCode && <span className="order-success-discount">Descuento {submittedOrder.discountCode}: -S/ {submittedOrder.discountAmount.toFixed(2)}</span>}
                 <button className="checkout-button" type="button" onClick={() => { setCartItems([]); setIsCheckoutOpen(false) }}>Volver al menú</button>
               </div>
             ) : (
@@ -513,13 +574,16 @@ function App() {
                   setSubmittedOrder({
                     orderId: result.orderId,
                     customerName: String(formData.get('name')),
-                    customerPhone: String(formData.get('phone')),
+                    customerPhone: customerPhone,
                     customerEmail: String(formData.get('email')),
                     fulfillment,
                     address: fulfillment === 'delivery' ? String(formData.get('address')) : '',
                     paymentMethod,
                     items: cartItems,
                     subtotal,
+                    ...(appliedPromotion ? { discountCode: appliedPromotion.code } : {}),
+                    discountAmount,
+                    total: totalAfterDiscount,
                   })
                 } catch { setCulqiMessage('No fue posible registrar el pedido. Inténtalo nuevamente.'); return } finally { setIsProcessingPayment(false) }
                 setIsOrderSubmitted(true)
@@ -540,7 +604,7 @@ function App() {
                 <fieldset>
                   <legend>Datos de contacto</legend>
                   <label>Nombre<input name="name" required placeholder="Tu nombre" autoComplete="name" /></label>
-                  <label>Celular<input name="phone" required inputMode="tel" placeholder="999 999 999" autoComplete="tel" /></label>
+                  <label>Celular<input name="phone" required inputMode="tel" value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} placeholder="999 999 999" autoComplete="tel" /></label>
                   <label>Correo electrónico<input name="email" type="email" required value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)} placeholder="tu@email.com" autoComplete="email" /></label>
                   {fulfillment === 'delivery' && <label>Dirección de delivery<textarea name="address" required placeholder="Calle, número, distrito y referencia" rows={3} /></label>}
                   <div className="receipt-fields">
@@ -560,6 +624,15 @@ function App() {
                     )}
                   </div>
                 </fieldset>
+                <fieldset className="promotion-fieldset">
+                  <legend>Código de descuento</legend>
+                  <p className="promotion-help">¿Tienes un código de nuestras redes o de Black Cat Member? Ingresa uno para validarlo.</p>
+                  <div className="promotion-code-row">
+                    <input value={promotionCode} onChange={(event) => { setPromotionCode(event.target.value.toUpperCase()); setAppliedPromotion(null) }} placeholder="Ej. ROCK10" maxLength={32} autoCapitalize="characters" />
+                    <button className="staff-secondary" type="button" disabled={isApplyingPromotion || !promotionCode.trim()} onClick={() => { void applyPromotion() }}>{isApplyingPromotion ? 'Validando…' : 'Aplicar'}</button>
+                  </div>
+                  {appliedPromotion && <p className="promotion-applied" role="status"><strong>{appliedPromotion.code}</strong> aplicado: {appliedPromotion.discountPercent}% de descuento en productos.</p>}
+                </fieldset>
                 <fieldset>
                   <legend>Método de pago</legend>
                   <div className="payment-options">
@@ -571,7 +644,9 @@ function App() {
                     ))}
                   </div>
                 </fieldset>
-                <div className="checkout-total"><span>Productos</span><strong>S/ {subtotal.toFixed(2)}</strong></div>
+                <div className="checkout-total"><span>Subtotal</span><strong>S/ {subtotal.toFixed(2)}</strong></div>
+                {appliedPromotion && <div className="checkout-discount"><span>Descuento {appliedPromotion.code} ({appliedPromotion.discountPercent}%)</span><strong>-S/ {discountAmount.toFixed(2)}</strong></div>}
+                <div className="checkout-total checkout-grand-total"><span>Total de productos</span><strong>S/ {totalAfterDiscount.toFixed(2)}</strong></div>
                 <p className="checkout-disclaimer">El costo de delivery se confirmará según la zona. No se realizará ningún cobro en esta etapa.</p>
                 {unavailableCartItems.length > 0 && <div className="unavailable-cart-warning" role="status"><strong>Uno o más productos de tu carrito ya no están disponibles.</strong><span>{unavailableCartItems.map((item) => item.name).join(', ')}</span><button className="remove-button" type="button" onClick={removeUnavailableItems}>Eliminar productos agotados</button></div>}
                 {!orderingOpen && <p className="ordering-closed checkout-closed" role="status"><strong>{manualKitchenClosed ? 'Cocina cerrada temporalmente' : 'Cocina Cerrada'}</strong><span>{manualKitchenClosed ? 'Intenta nuevamente más tarde.' : `Nuestro horario de atención online es: ${onlineOrderingHours.display}`}</span></p>}

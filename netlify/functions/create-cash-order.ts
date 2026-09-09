@@ -3,6 +3,7 @@ import { createOrder } from '../lib/orders'
 import { json, parseOrderInput } from '../lib/request'
 import { getOnlineOrderingAvailability } from '../lib/online-ordering'
 import { getUnavailableProducts, ProductAvailabilityError } from '../lib/product-availability'
+import { confirmPromotionUse, getReservedPromotion } from '../lib/promotions'
 
 export default async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') return json(405, { message: 'Método no permitido.' })
@@ -14,7 +15,11 @@ export default async (request: Request): Promise<Response> => {
   try {
     const unavailableProducts = await getUnavailableProducts(input.items)
     if (unavailableProducts.length) return json(409, { code: 'PRODUCT_UNAVAILABLE', unavailable_products: unavailableProducts, message: 'Uno o más productos ya no están disponibles.' })
-    const order = await createOrder(input, 'pending')
+    const subtotal = input.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    const promotion = input.promotionCode ? await getReservedPromotion({ checkoutId: input.checkoutId, code: input.promotionCode, email: input.email, phone: input.phone, subtotal }) : null
+    if (input.promotionCode && !promotion) return json(400, { message: 'El código de descuento ya no es válido. Vuelve a aplicarlo.' })
+    const order = await createOrder(input, 'pending', promotion ? { code: promotion.code, discountPercent: promotion.discountPercent, discountAmount: promotion.discountAmount } : undefined)
+    if (promotion) await confirmPromotionUse({ checkoutId: order.checkoutId, orderId: order.orderId })
     const notified = await notifyOrder(order)
     return json(201, { orderId: notified.orderId, paymentStatus: notified.paymentStatus })
   } catch (error) {

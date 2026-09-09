@@ -19,6 +19,8 @@ const message = (order: StoreOrder) => [
   '',
   ...order.items.flatMap((item) => [`${item.quantity} x ${item.name}${item.style ? ` · ${item.style}` : ''}${item.sauce ? ` · Salsa ${item.sauce}` : ''}`, ...(item.note ? [`- ${item.note}`] : [])]),
   '',
+  `Subtotal: S/ ${order.subtotal.toFixed(2)}`,
+  ...(order.discountCode ? [`Descuento ${order.discountCode} (${order.discountPercent}%): -S/ ${order.discountAmount.toFixed(2)}`] : []),
   `Total: S/ ${order.total.toFixed(2)}`,
   `Pago: ${order.paymentMethod.toUpperCase()}`,
   `Estado: ${paymentLabel(order)}`,

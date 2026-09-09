@@ -24,6 +24,10 @@ export type StoreOrder = {
   ruc?: string
   items: OrderItem[]
   notes: string[]
+  subtotal: number
+  discountCode?: string
+  discountPercent?: number
+  discountAmount: number
   total: number
   paymentMethod: PaymentMethod
   paymentStatus: PaymentStatus
@@ -33,7 +37,8 @@ export type StoreOrder = {
   whatsappNotificationStatus: NotificationStatus
 }
 
-export type OrderInput = Omit<StoreOrder, 'orderId' | 'databaseOrderId' | 'createdAt' | 'total' | 'paymentStatus' | 'culqiChargeId' | 'culqiOrderId' | 'emailNotificationStatus' | 'whatsappNotificationStatus' | 'notes'>
+export type OrderInput = Omit<StoreOrder, 'orderId' | 'databaseOrderId' | 'createdAt' | 'subtotal' | 'discountCode' | 'discountPercent' | 'discountAmount' | 'total' | 'paymentStatus' | 'culqiChargeId' | 'culqiOrderId' | 'emailNotificationStatus' | 'whatsappNotificationStatus' | 'notes'> & { promotionCode?: string }
+export type OrderPromotion = { code: string; discountPercent: number; discountAmount: number }
 
 const orders = () => getStore({ name: 'the-black-cat-orders', consistency: 'strong' })
 const checkoutLinks = () => getStore({ name: 'the-black-cat-checkout-links', consistency: 'strong' })
@@ -73,9 +78,12 @@ const kitchenOrderPayload = (order: StoreOrder) => ({
   delivery_reference: '',
   payment_method: order.paymentMethod,
   payment_status: order.paymentStatus,
-  subtotal: order.total,
+  subtotal: order.subtotal,
   delivery_fee: 0,
   total: order.total,
+  discount_code: order.discountCode ?? '',
+  discount_percent: order.discountPercent ?? '',
+  discount_amount: order.discountAmount,
   notes: order.notes.join('\n'),
   created_at: order.createdAt,
 })
@@ -111,16 +119,21 @@ export const getOrderByCheckoutId = async (checkoutId: string) => {
   return typeof orderId === 'string' ? getOrder(orderId) : null
 }
 
-export const createOrder = async (input: OrderInput, paymentStatus: PaymentStatus): Promise<StoreOrder> => {
+export const createOrder = async (input: OrderInput, paymentStatus: PaymentStatus, promotion?: OrderPromotion): Promise<StoreOrder> => {
   const existing = await getOrderByCheckoutId(input.checkoutId)
   if (existing) return existing
 
+  const subtotal = input.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  const discountAmount = promotion?.discountAmount ?? 0
   const order: StoreOrder = {
     ...input,
     orderId: buildOrderId(),
     createdAt: new Date().toISOString(),
     notes: input.items.flatMap((item) => item.note ? [`${item.name}${item.style ? ` · ${item.style}` : ''}${item.sauce ? ` · Salsa ${item.sauce}` : ''}: ${item.note}`] : []),
-    total: input.items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+    subtotal,
+    ...(promotion ? { discountCode: promotion.code, discountPercent: promotion.discountPercent } : {}),
+    discountAmount,
+    total: subtotal - discountAmount,
     paymentStatus,
     emailNotificationStatus: 'pending',
     whatsappNotificationStatus: 'pending',

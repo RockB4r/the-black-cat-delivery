@@ -1,9 +1,10 @@
 import { notifyOrder } from '../lib/notifications'
-import { getOrderByCheckoutId, trustedItems } from '../lib/orders'
+import { getOrderByCheckoutId } from '../lib/orders'
 import { getStore } from '@netlify/blobs'
 import { json, parseOrderInput } from '../lib/request'
 import { getOnlineOrderingAvailability } from '../lib/online-ordering'
 import { getUnavailableProducts, ProductAvailabilityError } from '../lib/product-availability'
+import { confirmPromotionUse, releasePromotion } from '../lib/promotions'
 
 export default async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') {
@@ -17,14 +18,13 @@ export default async (request: Request): Promise<Response> => {
   const token = typeof data?.token === 'string' ? data.token.trim() : ''
   const internalOrderId = typeof data?.internalOrderId === 'string' ? data.internalOrderId.trim() : ''
   const input = parseOrderInput(body, 'card')
-  const validated = trustedItems(data?.items)
   const amount = data?.amount
-  if (!token || !input || !validated || !Number.isSafeInteger(amount) || amount !== validated.total * 100 || data?.currency !== 'PEN') return json(400, { approved: false, message: 'Los datos de pago no son válidos.' })
+  if (!token || !input || !Number.isSafeInteger(amount) || data?.currency !== 'PEN') return json(400, { approved: false, message: 'Los datos de pago no son válidos.' })
 
   const order = await getOrderByCheckoutId(input.checkoutId)
   if (!order || order.paymentStatus === 'expired' || !internalOrderId || order.databaseOrderId !== internalOrderId) return json(409, { approved: false, message: 'Este intento de pago ya no está disponible. Inicia un nuevo pedido.' })
   if (order.paymentStatus === 'paid') return json(200, { approved: true, chargeId: order.culqiChargeId, orderId: order.orderId })
-  if (order.total !== validated.total || order.email !== input.email || order.checkoutId !== input.checkoutId) return json(409, { approved: false, message: 'Los datos del intento de pago no coinciden. Inicia un nuevo pedido.' })
+  if (amount !== Math.round(order.total * 100) || order.email !== input.email || order.checkoutId !== input.checkoutId) return json(409, { approved: false, message: 'Los datos del intento de pago no coinciden. Inicia un nuevo pedido.' })
 
   try {
     const unavailableProducts = await getUnavailableProducts(order.items)
@@ -65,6 +65,7 @@ export default async (request: Request): Promise<Response> => {
     if (!culqiResponse.ok) {
       if (culqiResponse.status >= 400 && culqiResponse.status < 500) {
         await getStore({ name: 'the-black-cat-payment-locks', consistency: 'strong' }).delete(`${input.checkoutId}/card`)
+        if (order.discountCode) await releasePromotion(order.checkoutId)
         return json(402, { approved: false, message: 'El pago fue rechazado. Verifica tus datos o intenta otro método.' })
       }
 
@@ -78,6 +79,7 @@ export default async (request: Request): Promise<Response> => {
       : undefined
 
     if (!chargeId) throw new Error('Culqi did not return a charge identifier.')
+    if (order.discountCode) await confirmPromotionUse({ checkoutId: order.checkoutId, orderId: order.orderId })
     const notified = await notifyOrder({ ...order, paymentMethod: 'card', paymentStatus: 'paid', culqiChargeId: chargeId })
     return json(200, { approved: true, chargeId, orderId: notified.orderId })
   } catch (error) {

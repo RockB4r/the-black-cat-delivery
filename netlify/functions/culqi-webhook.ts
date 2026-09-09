@@ -1,5 +1,6 @@
 import { notifyOrder } from '../lib/notifications'
 import { getOrder, getOrderIdByCulqiOrder, saveOrder } from '../lib/orders'
+import { confirmPromotionUse, releasePromotion } from '../lib/promotions'
 
 const response = (status: number) => new Response(null, { status })
 
@@ -27,9 +28,11 @@ export default async (request: Request): Promise<Response> => {
       const operationId = 'id' in culqiOrder && typeof culqiOrder.id === 'string' ? culqiOrder.id : undefined
       const paidOrder = { ...order, paymentStatus: 'paid' as const, culqiOrderId: operationId ?? order.culqiOrderId }
       await saveOrder(paidOrder)
+      if (paidOrder.discountCode) await confirmPromotionUse({ checkoutId: paidOrder.checkoutId, orderId: paidOrder.orderId })
       await notifyOrder(paidOrder)
     } else if (state === 'expired' && order.paymentStatus === 'pending') {
       await saveOrder({ ...order, paymentStatus: 'expired' })
+      if (order.discountCode) await releasePromotion(order.checkoutId)
     }
     return response(200)
   } catch (error) {

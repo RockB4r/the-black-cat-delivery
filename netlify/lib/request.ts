@@ -18,8 +18,9 @@ export const parseOrderInput = (body: unknown, paymentMethod: PaymentMethod): Or
   const dni = typeof data.dni === 'string' ? data.dni.trim() : ''
   const ruc = typeof data.ruc === 'string' ? data.ruc.trim() : ''
   const checkoutId = typeof data.checkoutId === 'string' ? data.checkoutId.trim() : ''
+  const promotionCode = typeof data.promotionCode === 'string' ? data.promotionCode.trim().toUpperCase().replace(/\s+/g, '') : ''
   if (!items || !customer || !phone || !emailPattern.test(email) || !fulfillment || !receiptType || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(checkoutId) || (fulfillment === 'delivery' && !address)) return null
   if (receiptType === 'boleta' && dni && !/^\d{8}$/.test(dni)) return null
   if (receiptType === 'factura' && !/^\d{11}$/.test(ruc)) return null
-  return { customer, phone, email, address, fulfillment, receiptType, checkoutId, ...(receiptType === 'boleta' && dni ? { dni } : {}), ...(receiptType === 'factura' ? { ruc } : {}), items: items.items, paymentMethod }
+  return { customer, phone, email, address, fulfillment, receiptType, checkoutId, ...(receiptType === 'boleta' && dni ? { dni } : {}), ...(receiptType === 'factura' ? { ruc } : {}), ...(promotionCode ? { promotionCode } : {}), items: items.items, paymentMethod }
 }
