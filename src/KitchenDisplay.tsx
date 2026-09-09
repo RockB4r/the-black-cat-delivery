@@ -59,7 +59,7 @@ export function KitchenDisplay() {
   const [scheduleOpen, setScheduleOpen] = useState(() => isOnlineOrderingOpen())
   const [updatingKitchenAvailability, setUpdatingKitchenAvailability] = useState(false)
   const canManageKitchen = staffRole === 'manager' || staffRole === 'admin'
-  const canOperateOrders = user?.email?.toLowerCase() === KITCHEN_EMAIL || staffRole === 'admin'
+  const canOperateOrders = user?.email?.toLowerCase() === KITCHEN_EMAIL || staffRole === 'manager' || staffRole === 'admin'
   const canManageProductAvailability = user?.email?.toLowerCase() === KITCHEN_EMAIL || staffRole === 'manager' || staffRole === 'admin'
 
   const authorize = async (nextUser: User | null) => {
@@ -118,6 +118,18 @@ export function KitchenDisplay() {
   const changeStatus = async (order: KitchenOrder, status: KitchenStatus) => {
     if (!canOperateOrders) return
     setUpdatingId(order.id); setMessage('')
+    if (staffRole === 'manager') {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) { setMessage('Tu sesión venció. Ingresa nuevamente.'); setUpdatingId(null); return }
+      try {
+        const response = await fetch('/.netlify/functions/update-kitchen-order-status', { method: 'POST', headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ orderId: order.id, status }) })
+        const result = await response.json() as { updated?: boolean; message?: string }
+        if (!response.ok || !result.updated) { setMessage(result.message ?? 'No fue posible actualizar el estado del pedido.'); return }
+        setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status } : item).filter((item) => item.status !== 'entregado'))
+      } catch { setMessage('No se pudo conectar con el servicio de pedidos.') } finally { setUpdatingId(null) }
+      return
+    }
     const { error } = await supabase.from('orders').update({ status }).eq('id', order.id)
     if (error) setMessage('No se pudo actualizar el estado del pedido. Intenta nuevamente.')
     else setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status } : item).filter((item) => item.status !== 'entregado'))

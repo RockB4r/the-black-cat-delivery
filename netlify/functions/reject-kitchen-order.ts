@@ -39,7 +39,7 @@ export default async (request: Request): Promise<Response> => {
     if (!allowed) {
       const profileResponse = await fetch(`${url}/rest/v1/staff_profiles?user_id=eq.${encodeURIComponent(userId)}&select=role,active`, { headers: headers(serviceKey) })
       const profiles: unknown = await profileResponse.json().catch(() => null)
-      allowed = Array.isArray(profiles) && profiles.some((profile) => profile && typeof profile === 'object' && profile.role === 'admin' && profile.active === true)
+      allowed = Array.isArray(profiles) && profiles.some((profile) => profile && typeof profile === 'object' && (profile.role === 'manager' || profile.role === 'admin') && profile.active === true)
     }
     if (!allowed) return json(403, { message: 'No tienes permiso para rechazar pedidos.' })
 
