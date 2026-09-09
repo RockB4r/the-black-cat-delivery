@@ -10,6 +10,16 @@ type MemberPromotion = {
 
 type MemberRecipient = { id: string; full_name: string; email: string | null }
 
+const welcomeHeroUrl = 'https://theblackcatrockbar.com/branding/member-welcome-email-hero.png'
+
+const escapeHtml = (value: string) => value.replace(/[&<>'"]/g, (character) => ({
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  "'": '&#39;',
+  '"': '&quot;',
+})[character] ?? character)
+
 const server = () => {
   const url = process.env.SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -37,6 +47,32 @@ export const sendMemberPromotionEmail = async (memberId: string, campaignType: '
 
   const isVip = promotion.campaign_type === 'vip'
   const title = isVip ? 'Tu beneficio VIP' : 'Tu beneficio de bienvenida'
+  const greeting = isVip ? 'Tienes un beneficio exclusivo de The Black Cat.' : '¡Bienvenido a Black Cat Member!'
+  const expiration = new Intl.DateTimeFormat('es-PE', { dateStyle: 'long', timeZone: 'America/Lima' }).format(new Date(promotion.expires_at))
+  const html = `<!doctype html>
+<html lang="es">
+  <body style="margin:0;padding:24px 12px;background:#11100f;color:#f7f0df;font-family:Arial,Helvetica,sans-serif;">
+    <main style="max-width:600px;margin:0 auto;overflow:hidden;border:1px solid #4c4131;border-radius:16px;background:#211f1c;">
+      <img src="${welcomeHeroUrl}" alt="The Black Cat Rock Bar" width="600" style="display:block;width:100%;height:auto;border:0;" />
+      <section style="padding:28px 28px 32px;">
+        <p style="margin:0 0 8px;color:#e74b32;font-size:12px;font-weight:700;letter-spacing:1.5px;">THE BLACK CAT · MEMBER</p>
+        <h1 style="margin:0 0 16px;color:#fff7e7;font-size:28px;line-height:1.2;">${escapeHtml(title)}</h1>
+        <p style="margin:0 0 18px;color:#e5dccd;font-size:16px;line-height:1.55;">Hola, ${escapeHtml(member.full_name)}.<br />${greeting}</p>
+        <div style="margin:0 0 20px;padding:18px;border:1px solid #d99d29;border-radius:12px;background:#171513;text-align:center;">
+          <p style="margin:0 0 7px;color:#d7cdbd;font-size:13px;">TU CÓDIGO PERSONAL</p>
+          <strong style="display:block;color:#ffc33d;font-size:25px;letter-spacing:1px;">${escapeHtml(promotion.code)}</strong>
+        </div>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 18px;border-collapse:collapse;color:#f7f0df;font-size:15px;line-height:1.65;">
+          <tr><td style="padding:5px 0;color:#bfb4a1;">Descuento</td><td style="padding:5px 0;text-align:right;font-weight:700;">${promotion.discount_percent}% en productos</td></tr>
+          <tr><td style="padding:5px 0;color:#bfb4a1;">Compra mínima</td><td style="padding:5px 0;text-align:right;font-weight:700;">S/ ${Number(promotion.minimum_subtotal).toFixed(2)}</td></tr>
+          <tr><td style="padding:5px 0;color:#bfb4a1;">Vigencia</td><td style="padding:5px 0;text-align:right;font-weight:700;">Hasta el ${escapeHtml(expiration)}</td></tr>
+        </table>
+        <p style="margin:0 0 24px;color:#d7cdbd;font-size:14px;line-height:1.55;">Válido para un solo uso. No acumulable con otros códigos.</p>
+        <a href="https://theblackcatrockbar.com" style="display:inline-block;padding:13px 20px;border-radius:8px;background:#ffc33d;color:#19140c;font-size:15px;font-weight:700;text-decoration:none;">Usar mi beneficio</a>
+      </section>
+    </main>
+  </body>
+</html>`
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
@@ -44,15 +80,16 @@ export const sendMemberPromotionEmail = async (memberId: string, campaignType: '
       from,
       to: [member.email],
       subject: `${title} · The Black Cat`,
+      html,
       text: [
         `Hola, ${member.full_name}.`,
         '',
-        isVip ? 'Tienes un beneficio exclusivo de The Black Cat.' : '¡Bienvenido a Black Cat Member!',
+        greeting,
         `Tu código personal es: ${promotion.code}`,
         `Descuento: ${promotion.discount_percent}% en productos.`,
         `Compra mínima: S/ ${Number(promotion.minimum_subtotal).toFixed(2)}.`,
         'Válido para un solo uso. No acumulable con otros códigos.',
-        `Vence: ${new Intl.DateTimeFormat('es-PE', { dateStyle: 'long', timeZone: 'America/Lima' }).format(new Date(promotion.expires_at))}.`,
+        `Vence: ${expiration}.`,
         '',
         'Úsalo al finalizar tu pedido en theblackcatrockbar.com.',
       ].join('\n'),
