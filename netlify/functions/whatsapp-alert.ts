@@ -1,6 +1,7 @@
 const json = (status: number, body: Record<string, unknown>) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } })
 
 const headers = (key: string) => ({ apikey: key, Authorization: `Bearer ${key}`, 'content-type': 'application/json', Prefer: 'return=minimal' })
+const alertCategories = new Set(['help', 'pickup', 'pedido', 'pedido_fuera_de_horario', 'club', 'horario', 'ubicacion', 'agradecimiento', 'generico'])
 const matchesToken = (provided: string, expected: string) => {
   if (provided.length !== expected.length) return false
   let difference = 0
@@ -17,7 +18,7 @@ export default async (request: Request): Promise<Response> => {
   if (!expectedToken || !url || !serviceKey || !matchesToken(providedToken, expectedToken)) return json(401, { message: 'No autorizado.' })
   const body: unknown = await request.json().catch(() => null)
   const data = body && typeof body === 'object' ? body as Record<string, unknown> : null
-  const category = data?.category === 'help' || data?.category === 'pickup' ? data.category : ''
+  const category = typeof data?.category === 'string' && alertCategories.has(data.category) ? data.category : ''
   const contactPhone = typeof data?.contactPhone === 'string' ? data.contactPhone.replace(/\D/g, '') : ''
   if (!category || contactPhone.length < 4 || contactPhone.length > 20) return json(400, { message: 'Alerta no válida.' })
   try {
