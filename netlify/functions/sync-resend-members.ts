@@ -38,7 +38,7 @@ const forEachInBatches = async <T>(values: T[], action: (value: T) => Promise<vo
 }
 
 const listResendContacts = async (apiKey: string, path: '/contacts' | `/segments/${string}/contacts`) => {
-  const contacts = new Set<string>()
+  const contacts = new Map<string, string>()
   let after = ''
   while (true) {
     const url = new URL(`https://api.resend.com${path}`)
@@ -50,7 +50,7 @@ const listResendContacts = async (apiKey: string, path: '/contacts' | `/segments
     const page = Array.isArray(body.data) ? body.data : []
     for (const contact of page) {
       const email = asEmail(contact.email)
-      if (email) contacts.add(email)
+      if (email && contact.id) contacts.set(email, contact.id)
     }
     if (!body.has_more || !page.length) break
     const next = page[page.length - 1]?.id
@@ -148,8 +148,8 @@ const createContact = async (apiKey: string, segmentId: string, topicId: string,
   if (!response.ok) throw new Error(`Resend contact creation failed with ${response.status}.`)
 }
 
-const getTopicSubscription = async (apiKey: string, email: string, topicId: string) => {
-  const response = await fetch(`https://api.resend.com/contacts/${encodeURIComponent(email)}/topics?limit=100`, {
+const getTopicSubscription = async (apiKey: string, contactId: string, topicId: string) => {
+  const response = await fetch(`https://api.resend.com/contacts/${encodeURIComponent(contactId)}/topics?limit=100`, {
     headers: resendHeaders(apiKey),
   })
   if (!response.ok) throw new Error(`Resend topic query failed with ${response.status}.`)
@@ -157,8 +157,8 @@ const getTopicSubscription = async (apiKey: string, email: string, topicId: stri
   return (Array.isArray(body.data) ? body.data : []).find((topic) => topic.id === topicId)?.subscription
 }
 
-const updateTopicSubscription = async (apiKey: string, email: string, topicId: string, subscription: 'opt_in' | 'opt_out') => {
-  const response = await fetch(`https://api.resend.com/contacts/${encodeURIComponent(email)}/topics`, {
+const updateTopicSubscription = async (apiKey: string, contactId: string, topicId: string, subscription: 'opt_in' | 'opt_out') => {
+  const response = await fetch(`https://api.resend.com/contacts/${encodeURIComponent(contactId)}/topics`, {
     method: 'PATCH',
     headers: resendHeaders(apiKey),
     body: JSON.stringify({ topics: [{ id: topicId, subscription }] }),
@@ -166,15 +166,15 @@ const updateTopicSubscription = async (apiKey: string, email: string, topicId: s
   if (!response.ok) throw new Error(`Resend topic update failed with ${response.status}.`)
 }
 
-const addToSegment = async (apiKey: string, email: string, segmentId: string) => {
-  const response = await fetch(`https://api.resend.com/contacts/${encodeURIComponent(email)}/segments/${encodeURIComponent(segmentId)}`, {
+const addToSegment = async (apiKey: string, contactId: string, segmentId: string) => {
+  const response = await fetch(`https://api.resend.com/contacts/${encodeURIComponent(contactId)}/segments/${encodeURIComponent(segmentId)}`, {
     method: 'POST', headers: resendHeaders(apiKey),
   })
   if (!response.ok) throw new Error(`Resend segment addition failed with ${response.status}.`)
 }
 
-const removeFromSegment = async (apiKey: string, email: string, segmentId: string) => {
-  const response = await fetch(`https://api.resend.com/contacts/${encodeURIComponent(email)}/segments/${encodeURIComponent(segmentId)}`, {
+const removeFromSegment = async (apiKey: string, contactId: string, segmentId: string) => {
+  const response = await fetch(`https://api.resend.com/contacts/${encodeURIComponent(contactId)}/segments/${encodeURIComponent(segmentId)}`, {
     method: 'DELETE', headers: resendHeaders(apiKey),
   })
   if (!response.ok) throw new Error(`Resend segment removal failed with ${response.status}.`)
@@ -202,8 +202,12 @@ export default async (_request: Request): Promise<void> => {
   ])
   const eligibleEmails = new Set(members.keys())
   const missingContacts = [...members.entries()].filter(([email]) => !resendContacts.has(email))
-  const membersOutsideSegment = [...members.keys()].filter((email) => resendContacts.has(email) && !segmentContacts.has(email))
-  const noLongerEligible = [...segmentContacts].filter((email) => !eligibleEmails.has(email))
+  const existingEligibleContacts = [...members.keys()].flatMap((email) => {
+    const contactId = resendContacts.get(email)
+    return contactId ? [{ email, contactId }] : []
+  })
+  const membersOutsideSegment = existingEligibleContacts.filter(({ email }) => !segmentContacts.has(email))
+  const noLongerEligible = [...segmentContacts.entries()].filter(([email]) => !eligibleEmails.has(email))
 
   let created = 0
   let addedToSegment = 0
@@ -219,28 +223,28 @@ export default async (_request: Request): Promise<void> => {
       failed += 1
     }
   })
-  await forEachInBatches([...members.keys()].filter((email) => resendContacts.has(email)), async (email) => {
+  await forEachInBatches(existingEligibleContacts, async ({ contactId }) => {
     try {
       // A manual Resend opt-out must always win over the member's prior consent.
-      if (await getTopicSubscription(resendApiKey, email, topicId) === undefined) {
-        await updateTopicSubscription(resendApiKey, email, topicId, 'opt_in')
+      if (await getTopicSubscription(resendApiKey, contactId, topicId) === undefined) {
+        await updateTopicSubscription(resendApiKey, contactId, topicId, 'opt_in')
         subscribedToTopic += 1
       }
     } catch {
       failed += 1
     }
   })
-  await forEachInBatches(membersOutsideSegment, async (email) => {
+  await forEachInBatches(membersOutsideSegment, async ({ contactId }) => {
     try {
-      await addToSegment(resendApiKey, email, segmentId)
+      await addToSegment(resendApiKey, contactId, segmentId)
       addedToSegment += 1
     } catch {
       failed += 1
     }
   })
-  await forEachInBatches(noLongerEligible, async (email) => {
+  await forEachInBatches(noLongerEligible, async ([, contactId]) => {
     try {
-      await removeFromSegment(resendApiKey, email, segmentId)
+      await removeFromSegment(resendApiKey, contactId, segmentId)
       removedFromSegment += 1
     } catch {
       failed += 1
