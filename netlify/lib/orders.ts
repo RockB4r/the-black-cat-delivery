@@ -78,6 +78,7 @@ const kitchenOrderPayload = (order: StoreOrder) => ({
   delivery_reference: '',
   payment_method: order.paymentMethod,
   payment_status: order.paymentStatus,
+  receipt_type: order.receiptType,
   subtotal: order.subtotal,
   delivery_fee: 0,
   total: order.total,
