@@ -298,7 +298,27 @@ function App() {
           return
         }
 
-        setCulqiMessage(`Pago aprobado. Pedido recibido por The Black Cat${result.orderId ? ` · Código: ${result.orderId}` : ''}.`)
+        setSubmittedOrder({
+          orderId: result.orderId,
+          customerName: order.customer,
+          customerPhone: order.phone,
+          customerEmail: order.email,
+          fulfillment,
+          address: order.address,
+          paymentMethod: 'Culqi',
+          items: cartItems,
+          subtotal,
+          ...(appliedPromotion ? { discountCode: appliedPromotion.code } : {}),
+          discountAmount,
+          total: totalAfterDiscount,
+        })
+        setCartItems([])
+        setIsOrderSubmitted(true)
+        checkoutIdRef.current = null
+        internalOrderIdRef.current = null
+        setPromotionCode('')
+        setAppliedPromotion(null)
+        setCulqiMessage('')
       } catch {
         setCulqiMessage('No fue posible conectar con el servicio de pago. Tu carrito se conserva intacto.')
       } finally {
