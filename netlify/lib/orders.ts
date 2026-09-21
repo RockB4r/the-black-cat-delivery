@@ -152,7 +152,7 @@ export const createOrder = async (input: OrderInput, paymentStatus: PaymentStatu
   return order
 }
 
-export const getOrder = async (orderId: string) => orders().getJSON<StoreOrder>(orderId, { consistency: 'strong' })
+export const getOrder = async (orderId: string) => orders().get(orderId, { type: 'json', consistency: 'strong' }) as Promise<StoreOrder | null>
 export const saveOrder = async (order: StoreOrder) => { await orders().setJSON(order.orderId, order); await syncKitchenPaymentStatus(order) }
 
 export const linkCulqiOrder = async (culqiOrderId: string, orderId: string) => {
