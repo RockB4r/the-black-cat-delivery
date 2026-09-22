@@ -7,12 +7,22 @@
 .gift-card-form input, .gift-card-redeem input, .gift-card-search input { width: 100%; margin-top: 7px; color: #fff7e8; border: 1px solid rgba(255,246,230,.18); border-radius: 4px; background: #2b2825; padding: 12px; font: inherit; }
 .gift-card-form label:has(textarea), .gift-card-form .staff-checkbox, .gift-card-form button { grid-column: 1 / -1; }
 .gift-card-search { grid-template-columns: 1fr auto; align-items: end; }
-.gift-card-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
-.gift-card-list button { display: grid; gap: 5px; min-width: 0; padding: 14px; border: 1px solid rgba(255,246,230,.16); border-radius: 5px; color: #fff7e8; background: #2b2825; text-align: left; cursor: pointer; }
-.gift-card-list button.selected { border-color: #f7bd3a; }
-.gift-card-list strong { color: #f7bd3a; }
-.gift-card-list span, .gift-card-list small { overflow-wrap: anywhere; }
-.gift-card-list small { color: #c9c0b3; }
+.gift-card-summary { display: flex; flex-wrap: wrap; gap: 7px 20px; padding: 10px 13px; border: 1px solid rgba(255,246,230,.12); border-radius: 5px; color: #c9c0b3; font-size: 13px; }
+.gift-card-summary strong { color: #fff7e8; }
+.gift-card-sections { display: grid; gap: 10px; }
+.gift-card-section { min-width: 0; border: 1px solid rgba(255,246,230,.16); border-radius: 6px; overflow: hidden; }
+.gift-card-section-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 13px 16px; border: 0; color: #f7bd3a; background: #2b2825; text-align: left; font: inherit; font-weight: 700; cursor: pointer; }
+.gift-card-section-toggle small { color: #c9c0b3; font-weight: 400; }
+.gift-card-list { display: grid; gap: 7px; padding: 9px; background: rgba(15,14,13,.24); }
+.gift-card-empty { margin: 5px; color: #c9c0b3; }
+.gift-card-item { min-width: 0; }
+.gift-card-compact { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(140px, 1.4fr) auto auto auto 16px; align-items: center; gap: 8px 15px; width: 100%; padding: 10px 12px; border: 1px solid rgba(255,246,230,.16); border-radius: 5px; color: #fff7e8; background: #2b2825; text-align: left; font: inherit; cursor: pointer; }
+.gift-card-compact.selected { border-color: #f7bd3a; border-radius: 5px 5px 0 0; }
+.gift-card-compact strong { color: #f7bd3a; }
+.gift-card-compact span, .gift-card-compact small { overflow-wrap: anywhere; }
+.gift-card-compact small { color: #c9c0b3; }
+.gift-card-status { color: #f7bd3a; }
+.gift-card-chevron { text-align: right; }
 .gift-card-detail { display: grid; gap: 16px; padding: 18px; border: 1px solid rgba(255,246,230,.16); border-radius: 6px; background: rgba(15,14,13,.32); }
 .gift-card-detail h3 { margin: 0; font-size: 24px; }
 .gift-card-detail-grid { display: grid; grid-template-columns: 1fr auto; gap: 24px; }
@@ -27,4 +37,5 @@
 .gift-card-history { list-style: none; display: grid; gap: 8px; margin: 0; padding: 0; }
 .gift-card-history li { display: flex; flex-wrap: wrap; gap: 5px 14px; justify-content: space-between; padding: 10px; border-bottom: 1px solid rgba(255,246,230,.12); }
 .gift-card-history small { width: 100%; color: #a89e91; overflow-wrap: anywhere; }
-@media (max-width: 680px) { .gift-card-form, .gift-card-search, .gift-card-detail-grid { grid-template-columns: 1fr; }.gift-card-qr { max-width: 100%; }.gift-card-search button, .gift-card-actions, .gift-card-actions button { width: 100%; } }
+@media (max-width: 900px) { .gift-card-compact { grid-template-columns: 1fr 1fr 20px; }.gift-card-compact strong, .gift-card-compact > span:nth-child(2) { grid-column: span 1; }.gift-card-compact .gift-card-chevron { grid-column: 3; grid-row: 1; }.gift-card-compact small { grid-column: 1 / 3; } }
+@media (max-width: 680px) { .gift-card-form, .gift-card-search, .gift-card-detail-grid { grid-template-columns: 1fr; }.gift-card-qr { max-width: 100%; }.gift-card-search button, .gift-card-actions, .gift-card-actions button { width: 100%; }.gift-card-compact { grid-template-columns: 1fr auto; gap: 5px 10px; }.gift-card-compact strong, .gift-card-compact > span:nth-child(2), .gift-card-compact small { grid-column: 1; }.gift-card-compact .gift-card-chevron { grid-column: 2; grid-row: 1; }.gift-card-detail { padding: 12px; } }
