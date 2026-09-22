@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import QRCode from 'qrcode'
 import { supabase } from '../lib/supabase'
 import type { StaffProfile } from './types'
+import { canManageGiftCards } from './giftCardPermissions'
 import './GiftCardsPanel.css'
 
 type GiftCard = {
@@ -42,7 +43,8 @@ const statusOf = (card: GiftCard) => card.status === 'active' && card.expires_at
 const statusLabel: Record<GiftCard['status'], string> = { pending: 'Pendiente', active: 'Activa', exhausted: 'Agotada', expired: 'Vencida', blocked: 'Bloqueada' }
 
 export function GiftCardsPanel({ profile }: { profile: StaffProfile }) {
-  const canManage = profile.role === 'manager' || profile.role === 'admin'
+  const canManage = canManageGiftCards(profile.role)
+  const [showCreate, setShowCreate] = useState(false)
   const [cards, setCards] = useState<GiftCard[]>([])
   const [searchResults, setSearchResults] = useState<GiftCard[] | null>(null)
   const [selected, setSelected] = useState<GiftCard | null>(null)
@@ -176,9 +178,9 @@ export function GiftCardsPanel({ profile }: { profile: StaffProfile }) {
   const visibleCards = searchResults ?? cards
 
   return <section className="staff-section gift-cards-panel">
-    <div className="staff-section-title"><div><h2>Gift Cards</h2><p>Emisión y canje interno en The Black Cat. La creación activa la tarjeta por 45 días.</p></div><button type="button" className="staff-secondary" onClick={() => void loadCards()} disabled={loading}>Actualizar</button></div>
+    <div className="staff-section-title"><div><h2>Gift Cards</h2><p>Emisión y canje interno en The Black Cat. La creación activa la tarjeta por 45 días.</p></div><div className="gift-card-actions">{canManage && <button type="button" className="staff-primary" aria-expanded={showCreate} onClick={() => setShowCreate((current) => !current)}>{showCreate ? 'Ocultar formulario' : 'Crear Gift Card'}</button>}<button type="button" className="staff-secondary" onClick={() => void loadCards()} disabled={loading}>Actualizar</button></div></div>
     {message && <p className="staff-message" role="status">{message}</p>}
-    {canManage && <details className="gift-card-create"><summary>Crear Gift Card</summary><form className="staff-form gift-card-form" onSubmit={createCard}>
+    {canManage && showCreate && <div className="gift-card-create"><form className="staff-form gift-card-form" onSubmit={createCard}>
       <label>Monto<select value={fixedAmount} onChange={(event) => setFixedAmount(event.target.value)}><option value="50">S/ 50</option><option value="75">S/ 75</option><option value="100">S/ 100</option><option value="200">S/ 200</option><option value="custom">Monto libre (más de S/ 100)</option></select></label>
       {fixedAmount === 'custom' && <label>Monto libre (S/)<input type="number" min="100.01" step="0.01" value={customAmount} onChange={(event) => setCustomAmount(event.target.value)} required /></label>}
       <label>Nombre del comprador<input value={purchaser} onChange={(event) => setPurchaser(event.target.value)} maxLength={160} required /></label>
@@ -188,7 +190,7 @@ export function GiftCardsPanel({ profile }: { profile: StaffProfile }) {
       <label>Mensaje de regalo (opcional)<textarea value={giftMessage} onChange={(event) => setGiftMessage(event.target.value)} maxLength={1000} /></label>
       <label className="staff-checkbox"><input type="checkbox" checked={transferable} onChange={(event) => setTransferable(event.target.checked)} /> Transferible: puede usarla quien presente el código o QR</label>
       <button className="staff-primary" disabled={busy}>{busy ? 'Creando…' : 'Crear y activar Gift Card'}</button>
-    </form></details>}
+    </form></div>}
     <form className="staff-form gift-card-search" onSubmit={findCard}><label>Buscar por código, nombre o pegar enlace QR<input value={search} onChange={(event) => { setSearch(event.target.value); setSearchResults(null) }} placeholder="BC-GC-000143 o nombre" /></label><button className="staff-primary">Consultar</button></form>
     <div className="gift-card-list" aria-label="Gift Cards recientes">{loading ? <p>Cargando…</p> : visibleCards.length === 0 ? <p>No hay Gift Cards recientes para mostrar.</p> : visibleCards.map((card) => <button key={card.id} type="button" onClick={() => { setSelected(card); setRedemption(null) }} className={selected?.id === card.id ? 'selected' : ''}><strong>{card.code}</strong><span>{card.recipient_name || card.purchaser_name}</span><span>{statusLabel[statusOf(card)]} · {money(card.current_balance)} / {money(card.initial_balance)}</span><small>Vence: {date(card.expires_at)}</small></button>)}</div>
     {selected && <div className="gift-card-detail"><div className="staff-section-title"><div><h3>{selected.code}</h3><p>{statusLabel[statusOf(selected)]} · Saldo {money(selected.current_balance)} de {money(selected.initial_balance)}</p></div>{canManage && statusOf(selected) === 'active' && <button type="button" className="staff-danger" disabled={busy} onClick={() => void blockCard()}>Bloquear</button>}</div>
