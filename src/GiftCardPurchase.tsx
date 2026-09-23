@@ -1,4 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react'
+import { checkoutForGiftPurchase, giftCheckoutStorageKey, newGiftCheckout, restoreGiftCheckout, type GiftPurchaseForm } from './giftCardCheckout'
 import './GiftCardsPublic.css'
 
 type Receipt = { code: string; token: string; payment_code: string; amount: number; activated_at: string; expires_at: string; purchaser_name: string; recipient_name: string | null; payment_method: string }
@@ -9,27 +10,33 @@ const sessionValue = (key: string) => { try { return window.sessionStorage.getIt
 const saveSession = (key: string, value: string) => { try { window.sessionStorage.setItem(key, value) } catch { /* Browser may block storage. */ } }
 
 export function GiftCardPurchase() {
-  const [amountChoice, setAmountChoice] = useState('50')
-  const [customAmount, setCustomAmount] = useState('')
-  const [purchaserName, setPurchaserName] = useState('')
-  const [purchaserEmail, setPurchaserEmail] = useState('')
-  const [purchaserPhone, setPurchaserPhone] = useState('')
-  const [recipientName, setRecipientName] = useState('')
-  const [recipientEmail, setRecipientEmail] = useState('')
-  const [recipientPhone, setRecipientPhone] = useState('')
-  const [message, setMessage] = useState('')
-  const [transferable, setTransferable] = useState(true)
-  const [deliveryMethod, setDeliveryMethod] = useState<'email' | 'whatsapp' | 'personal'>('personal')
+  const [initialCheckout] = useState(() => restoreGiftCheckout(sessionValue(giftCheckoutStorageKey)))
+  const [amountChoice, setAmountChoice] = useState(initialCheckout.form.amountChoice)
+  const [customAmount, setCustomAmount] = useState(initialCheckout.form.customAmount)
+  const [purchaserName, setPurchaserName] = useState(initialCheckout.form.purchaserName)
+  const [purchaserEmail, setPurchaserEmail] = useState(initialCheckout.form.purchaserEmail)
+  const [purchaserPhone, setPurchaserPhone] = useState(initialCheckout.form.purchaserPhone)
+  const [recipientName, setRecipientName] = useState(initialCheckout.form.recipientName)
+  const [recipientEmail, setRecipientEmail] = useState(initialCheckout.form.recipientEmail)
+  const [recipientPhone, setRecipientPhone] = useState(initialCheckout.form.recipientPhone)
+  const [message, setMessage] = useState(initialCheckout.form.message)
+  const [transferable, setTransferable] = useState(initialCheckout.form.transferable)
+  const [deliveryMethod, setDeliveryMethod] = useState(initialCheckout.form.deliveryMethod)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState('')
   const [receipt, setReceipt] = useState<Receipt | null>(null)
-  const checkoutId = useRef(sessionValue('tbc-gift-checkout') || crypto.randomUUID())
-  const accessToken = useRef(sessionValue('tbc-gift-access'))
+  const checkout = useRef(initialCheckout)
+  const accessToken = useRef(sessionValue(giftCheckoutStorageKey) === JSON.stringify(initialCheckout) ? sessionValue('tbc-gift-access') : '')
   const submitted = useRef(false)
 
   const newPurchase = () => {
-    checkoutId.current = crypto.randomUUID(); accessToken.current = ''; submitted.current = false
-    saveSession('tbc-gift-checkout', checkoutId.current); saveSession('tbc-gift-access', '')
+    checkout.current = newGiftCheckout(); accessToken.current = ''; submitted.current = false
+    saveSession(giftCheckoutStorageKey, JSON.stringify(checkout.current)); saveSession('tbc-gift-access', '')
+    const form = checkout.current.form
+    setAmountChoice(form.amountChoice); setCustomAmount(form.customAmount)
+    setPurchaserName(form.purchaserName); setPurchaserEmail(form.purchaserEmail); setPurchaserPhone(form.purchaserPhone)
+    setRecipientName(form.recipientName); setRecipientEmail(form.recipientEmail); setRecipientPhone(form.recipientPhone)
+    setMessage(form.message); setTransferable(form.transferable); setDeliveryMethod(form.deliveryMethod)
     setStatus('Puedes preparar una nueva compra.'); setReceipt(null)
   }
 
@@ -48,12 +55,19 @@ export function GiftCardPurchase() {
   const startPurchase = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (busy || submitted.current) return
-    saveSession('tbc-gift-checkout', checkoutId.current)
     if (amountChoice === 'custom' && !(Number(customAmount) > 100)) { setStatus('El monto libre debe ser mayor a S/ 100.'); return }
     if (!window.CulqiCheckout || !import.meta.env.VITE_CULQI_PUBLIC_KEY) { setStatus('El pago todavía no está disponible. Inténtalo más tarde.'); return }
+    const form: GiftPurchaseForm = { amountChoice, customAmount, purchaserName, purchaserEmail, purchaserPhone, recipientName, recipientEmail, recipientPhone, message, transferable, deliveryMethod }
+    const nextCheckout = checkoutForGiftPurchase(checkout.current, form)
+    if (nextCheckout.checkoutId !== checkout.current.checkoutId) {
+      accessToken.current = ''
+      saveSession('tbc-gift-access', '')
+    }
+    checkout.current = nextCheckout
+    saveSession(giftCheckoutStorageKey, JSON.stringify(nextCheckout))
     setBusy(true); setStatus('Preparando compra segura…')
     try {
-      const response = await fetch('/.netlify/functions/gift-card-purchase', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ checkoutId: checkoutId.current, amountChoice, customAmount, purchaserName, purchaserEmail, purchaserPhone, recipientName, recipientEmail, recipientPhone, message, transferable, deliveryMethod }) })
+      const response = await fetch('/.netlify/functions/gift-card-purchase', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ checkoutId: nextCheckout.checkoutId, ...form }) })
       const prepared = await response.json() as Partial<Prepared> & { message?: string }
       if (!response.ok || !prepared.accessToken || !prepared.amountInCents) { setStatus(prepared.message ?? 'No se pudo preparar la compra.'); return }
       accessToken.current = prepared.accessToken
