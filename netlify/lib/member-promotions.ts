@@ -11,6 +11,7 @@ type MemberPromotion = {
 type MemberRecipient = { id: string; full_name: string; email: string | null }
 
 const welcomeHeroUrl = 'https://theblackcatrockbar.com/branding/member-welcome-email-hero.png'
+const vipHeroUrl = 'https://theblackcatrockbar.com/branding/member-vip-email-hero.png'
 
 const escapeHtml = (value: string) => value.replace(/[&<>'"]/g, (character) => ({
   '&': '&amp;',
@@ -46,6 +47,7 @@ export const sendMemberPromotionEmail = async (memberId: string, campaignType: '
   if (!apiKey || !from) throw new Error('Email notification environment is incomplete.')
 
   const isVip = promotion.campaign_type === 'vip'
+  const heroUrl = isVip ? vipHeroUrl : welcomeHeroUrl
   const title = isVip ? 'Tu beneficio VIP' : 'Tu beneficio de bienvenida'
   const greeting = isVip ? 'Tienes un beneficio exclusivo de The Black Cat.' : '¡Bienvenido a Black Cat Member!'
   const expiration = new Intl.DateTimeFormat('es-PE', { dateStyle: 'long', timeZone: 'America/Lima' }).format(new Date(promotion.expires_at))
@@ -53,7 +55,7 @@ export const sendMemberPromotionEmail = async (memberId: string, campaignType: '
 <html lang="es">
   <body style="margin:0;padding:24px 12px;background:#11100f;color:#f7f0df;font-family:Arial,Helvetica,sans-serif;">
     <main style="max-width:600px;margin:0 auto;overflow:hidden;border:1px solid #4c4131;border-radius:16px;background:#211f1c;">
-      <img src="${welcomeHeroUrl}" alt="The Black Cat Rock Bar" width="600" style="display:block;width:100%;height:auto;border:0;" />
+      <img src="${heroUrl}" alt="${isVip ? 'Beneficios exclusivos para socios VIP de The Black Cat' : 'Bienvenido a Black Cat Member'}" width="600" style="display:block;width:100%;height:auto;border:0;" />
       <section style="padding:28px 28px 32px;">
         <p style="margin:0 0 8px;color:#e74b32;font-size:12px;font-weight:700;letter-spacing:1.5px;">THE BLACK CAT · MEMBER</p>
         <h1 style="margin:0 0 16px;color:#fff7e7;font-size:28px;line-height:1.2;">${escapeHtml(title)}</h1>
@@ -68,6 +70,7 @@ export const sendMemberPromotionEmail = async (memberId: string, campaignType: '
           <tr><td style="padding:5px 0;color:#bfb4a1;">Vigencia</td><td style="padding:5px 0;text-align:right;font-weight:700;">Hasta el ${escapeHtml(expiration)}</td></tr>
         </table>
         <p style="margin:0 0 24px;color:#d7cdbd;font-size:14px;line-height:1.55;">Válido para un solo uso. No acumulable con otros códigos.</p>
+        ${isVip ? '<div style="margin:0 0 24px;padding:18px;border-left:4px solid #d99d29;border-radius:8px;background:#171513;"><strong style="display:block;margin:0 0 7px;color:#ffc33d;font-size:16px;">Beneficio de cumpleaños VIP</strong><p style="margin:0;color:#e5dccd;font-size:14px;line-height:1.55;">Además, recibirás un cupón de cumpleaños válido por 1 Burger + 1 cerveza de barril de 330 ml a elección.</p></div>' : ''}
         <a href="https://theblackcatrockbar.com" style="display:inline-block;padding:13px 20px;border-radius:8px;background:#ffc33d;color:#19140c;font-size:15px;font-weight:700;text-decoration:none;">Usar mi beneficio</a>
       </section>
     </main>
@@ -89,6 +92,7 @@ export const sendMemberPromotionEmail = async (memberId: string, campaignType: '
         `Descuento: ${promotion.discount_percent}% en productos.`,
         `Compra mínima: S/ ${Number(promotion.minimum_subtotal).toFixed(2)}.`,
         'Válido para un solo uso. No acumulable con otros códigos.',
+        ...(isVip ? ['', 'Beneficio de cumpleaños VIP: recibirás un cupón válido por 1 Burger + 1 cerveza de barril de 330 ml a elección.'] : []),
         `Vence: ${expiration}.`,
         '',
         'Úsalo al finalizar tu pedido en theblackcatrockbar.com.',
