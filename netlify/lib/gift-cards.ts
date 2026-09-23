@@ -98,8 +98,19 @@ const database = async <T>(path: string, init: RequestInit = {}): Promise<T> => 
     ...init,
     headers: { apikey: key, Authorization: `Bearer ${key}`, 'content-type': 'application/json', ...(init.headers as Record<string, string> | undefined) },
   })
-  if (!response.ok) throw new Error(`Gift Card database request failed with HTTP ${response.status}`)
-  return response.status === 204 ? undefined as T : response.json() as Promise<T>
+  const body = await response.text()
+  if (!response.ok) {
+    const detail = body.slice(0, 300)
+      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]')
+      .replace(/\b\+?\d[\d\s().-]{7,}\d\b/g, '[phone]')
+      .replace(/\b(?:sk_(?:test|live)_|sb_secret_)[A-Za-z0-9_-]+\b/g, '[secret]')
+    throw new Error(`Gift Card database request failed with HTTP ${response.status}${detail ? `: ${detail}` : ''}`)
+  }
+  if (!body.trim()) return undefined as T
+  if (!/\bapplication\/(?:[\w.+-]+\+)?json\b/i.test(response.headers.get('content-type') ?? '')) {
+    throw new Error(`Gift Card database request returned non-JSON content with HTTP ${response.status}`)
+  }
+  return JSON.parse(body) as T
 }
 
 const one = <T>(rows: T[]) => rows[0] ?? null
