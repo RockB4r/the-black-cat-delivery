@@ -1,9 +1,36 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { confirmedCulqiCharge, confirmedCulqiOrder, expiredCulqiOrder, matchingCulqiOrder } from '../netlify/lib/culqi-verification.ts'
+import { culqiGiftCardOrderNumber, confirmedCulqiCharge, confirmedCulqiOrder, expiredCulqiOrder, matchingCulqiOrder, sanitizeCulqiErrorBody } from '../netlify/lib/culqi-verification.ts'
 
 const expected = { id: 'ord_live_test', orderNumber: 'TBC-TEST-001', amountInCents: 3000 }
 const order = { id: expected.id, order_number: expected.orderNumber, amount: 3000, currency_code: 'PEN', state: 'paid' }
+
+test('UUID estándar genera un número Culqi determinista de máximo 36 caracteres', () => {
+  const checkoutId = '4656e4ad-ef27-4d70-84f2-02b6a2efb847'
+  const number = culqiGiftCardOrderNumber(checkoutId)
+  assert.equal(number, 'GC-4656e4adef274d7084f202b6a2efb847')
+  assert.equal(number.length, 35)
+  assert.equal(culqiGiftCardOrderNumber(checkoutId), number)
+  assert.notEqual(culqiGiftCardOrderNumber('2f93f26c-916f-4fb4-976e-dc434676e4d5'), number)
+})
+
+test('la verificación e idempotencia aceptan el mismo número generado', () => {
+  const checkoutId = '4656e4ad-ef27-4d70-84f2-02b6a2efb847'
+  const orderNumber = culqiGiftCardOrderNumber(checkoutId)
+  const giftExpected = { id: 'ord_test_123', orderNumber, amountInCents: 5000 }
+  const giftOrder = { id: giftExpected.id, order_number: orderNumber, amount: 5000, currency_code: 'PEN', state: 'pending' }
+  assert.equal(matchingCulqiOrder(giftOrder, giftExpected), true)
+  assert.equal(matchingCulqiOrder(giftOrder, { ...giftExpected, orderNumber: culqiGiftCardOrderNumber(checkoutId) }), true)
+  assert.equal(matchingCulqiOrder({ ...giftOrder, order_number: `GC-${checkoutId}` }, giftExpected), false)
+})
+
+test('el error de Culqi se trunca y redacta datos sensibles', () => {
+  const body = JSON.stringify({ merchant_message: 'order_number inválido', email: 'cliente@example.com', phone_number: '933622680', authorization: 'Bearer sk_test_FAKESECRET123', extra: 'x'.repeat(800) })
+  const sanitized = sanitizeCulqiErrorBody(body)
+  assert.match(sanitized, /order_number inválido/)
+  assert.ok(sanitized.length <= 600)
+  assert.doesNotMatch(sanitized, /cliente@example\.com|933622680|FAKESECRET123/)
+})
 
 test('un pedido Culqi solo confirma el checkout esperado, en PEN y por monto exacto', () => {
   assert.equal(confirmedCulqiOrder(order, expected), true)

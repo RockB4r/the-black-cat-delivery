@@ -2,7 +2,7 @@ import { notifyOrder } from '../lib/notifications'
 import { getOrder, getOrderIdByCulqiOrder, saveOrder } from '../lib/orders'
 import { confirmPromotionUse, releasePromotion } from '../lib/promotions'
 import { applyGiftToOrder, finalizeGiftPurchase, getGiftPurchaseByCulqiOrder, getLinkedMixedCulqiCharge, getOrderGiftPayment, markMixedCulqiExpired, releaseGiftReservation, setGiftPaymentState } from '../lib/gift-cards'
-import { confirmedCulqiOrder, expiredCulqiOrder } from '../lib/culqi-verification'
+import { culqiGiftCardOrderNumber, confirmedCulqiOrder, expiredCulqiOrder } from '../lib/culqi-verification'
 
 const response = (status: number) => new Response(null, { status })
 
@@ -24,7 +24,7 @@ export default async (request: Request): Promise<Response> => {
     const state = 'state' in culqiOrder && typeof culqiOrder.state === 'string' ? culqiOrder.state : ''
     const giftPurchase = await getGiftPurchaseByCulqiOrder(culqiOrderId)
     if (giftPurchase) {
-      const expected = { id: culqiOrderId, orderNumber: `GC-${giftPurchase.checkout_id}`, amountInCents: Math.round(Number(giftPurchase.amount) * 100) }
+      const expected = { id: culqiOrderId, orderNumber: culqiGiftCardOrderNumber(giftPurchase.checkout_id), amountInCents: Math.round(Number(giftPurchase.amount) * 100) }
       if (state === 'paid' && !confirmedCulqiOrder(culqiOrder, expected)) return response(400)
       if (state === 'paid') await finalizeGiftPurchase(giftPurchase, giftPurchase.culqi_charge_id)
       return response(200)

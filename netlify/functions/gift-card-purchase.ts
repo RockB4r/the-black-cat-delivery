@@ -1,6 +1,6 @@
 import { attachGiftCulqiOrder, createGiftPurchase, giftPurchaseLock, parseGiftPurchase } from '../lib/gift-cards'
 import { json } from '../lib/request'
-import { matchingCulqiOrder } from '../lib/culqi-verification'
+import { culqiGiftCardOrderNumber, matchingCulqiOrder, sanitizeCulqiErrorBody } from '../lib/culqi-verification'
 
 export default async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') return json(405, { message: 'Método no permitido.' })
@@ -21,18 +21,20 @@ export default async (request: Request): Promise<Response> => {
       body: JSON.stringify({
         amount: Math.round(Number(purchase.amount) * 100), currency_code: 'PEN',
         description: `Gift Card The Black Cat ${purchase.checkout_id}`,
-        order_number: `GC-${purchase.checkout_id}`,
+        order_number: culqiGiftCardOrderNumber(purchase.checkout_id),
         expiration_date: Math.floor(Date.now() / 1000) + 60 * 60,
         confirm: true,
         client_details: { first_name: firstName, last_name: lastName.join(' ') || 'Cliente', email: purchase.purchaser_email,
           ...(purchase.purchaser_phone ? { phone_number: purchase.purchaser_phone.replace(/\D/g, '') } : {}) },
       }),
     })
-    const data: unknown = await response.json().catch(() => null)
+    const responseBody = await response.text()
+    let data: unknown = null
+    try { data = JSON.parse(responseBody) } catch { /* Culqi may return a non-JSON error. */ }
     const orderId = data && typeof data === 'object' && 'id' in data && typeof data.id === 'string' ? data.id : ''
-    if (!response.ok || !orderId.startsWith('ord_') || !matchingCulqiOrder(data, { id: orderId, orderNumber: `GC-${purchase.checkout_id}`, amountInCents: Math.round(Number(purchase.amount) * 100) })) {
+    if (!response.ok || !orderId.startsWith('ord_') || !matchingCulqiOrder(data, { id: orderId, orderNumber: culqiGiftCardOrderNumber(purchase.checkout_id), amountInCents: Math.round(Number(purchase.amount) * 100) })) {
       await giftPurchaseLock().delete(input.checkoutId)
-      console.error('Gift Card Culqi order rejected:', response.status)
+      console.error('Gift Card Culqi order rejected:', response.status, !response.ok ? sanitizeCulqiErrorBody(responseBody) : 'Unexpected order response')
       return json(502, { message: 'No se pudo preparar el pago de la Gift Card.' })
     }
     await attachGiftCulqiOrder(purchase.checkout_id, orderId)

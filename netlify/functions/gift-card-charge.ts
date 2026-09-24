@@ -1,6 +1,6 @@
 import { finalizeGiftPurchase, getGiftPurchaseByAccess, giftChargeLock, recordGiftCharge } from '../lib/gift-cards'
 import { json } from '../lib/request'
-import { confirmedCulqiCharge, confirmedCulqiOrder, expiredCulqiOrder, matchingCulqiOrder } from '../lib/culqi-verification'
+import { culqiGiftCardOrderNumber, confirmedCulqiCharge, confirmedCulqiOrder, expiredCulqiOrder, matchingCulqiOrder } from '../lib/culqi-verification'
 
 export default async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') return json(405, { message: 'Método no permitido.' })
@@ -24,7 +24,7 @@ export default async (request: Request): Promise<Response> => {
       const order: unknown = await orderResponse.json().catch(() => null)
       if (!orderResponse.ok || !order || typeof order !== 'object') return json(503, { message: 'No se pudo verificar la orden de Culqi. Inténtalo más tarde.' })
       const state = 'state' in order && typeof order.state === 'string' ? order.state : ''
-      const expected = { id: purchase.culqi_order_id, orderNumber: `GC-${purchase.checkout_id}`, amountInCents: Math.round(Number(purchase.amount) * 100) }
+      const expected = { id: purchase.culqi_order_id, orderNumber: culqiGiftCardOrderNumber(purchase.checkout_id), amountInCents: Math.round(Number(purchase.amount) * 100) }
       if (state === 'paid' && confirmedCulqiOrder(order, expected)) return json(200, { approved: true, receipt: await finalizeGiftPurchase(purchase, purchase.culqi_charge_id) })
       if (state === 'expired' && expiredCulqiOrder(order, expected)) return json(409, { message: 'La orden de pago venció. Inicia una nueva compra.' })
       if (!matchingCulqiOrder(order, expected)) return json(409, { message: 'La orden de Culqi no coincide con esta compra.' })
