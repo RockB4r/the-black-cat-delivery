@@ -4,6 +4,7 @@ import { buildGiftChargeDiagnostic, checkoutIdFromDiagnosticCharge, diagnosticCh
 import diagnosticFunction from '../netlify/functions/gift-card-charge-diagnostic.ts'
 
 const checkoutId = 'fd69d4a7-9ad4-4ce8-968e-f00a0cae02ee'
+const approvedChargeId = 'chr_test_KZ1Gsu01muNpi1Ns'
 const stagingSupabaseOrigin = `https://${['kqfphrukxdvlrbjipjnx', 'supabase', 'co'].join('.')}`
 const purchase = { checkout_id: checkoutId, amount: 50 }
 const charge = {
@@ -14,6 +15,7 @@ const charge = {
 }
 
 test('el diagnóstico compara exactamente los campos de confirmedCulqiCharge', () => {
+  assert.equal(diagnosticChargeId, approvedChargeId)
   assert.equal(checkoutIdFromDiagnosticCharge(charge), checkoutId)
   assert.deepEqual(buildGiftChargeDiagnostic(charge, purchase).checks, {
     id: true, amount: true, currency: true, response_code: true, description: true,

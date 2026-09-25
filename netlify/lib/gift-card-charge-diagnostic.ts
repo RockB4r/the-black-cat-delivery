@@ -1,6 +1,6 @@
 import { confirmedCulqiCharge } from './culqi-verification.ts'
 
-export const diagnosticChargeId = 'chr_test_K7IGsuO1muNpi1Ns'
+export const diagnosticChargeId = 'chr_test_KZ1Gsu01muNpi1Ns'
 
 type ExpectedPurchase = { checkout_id: string; amount: number } | null
 type RecordValue = Record<string, unknown>
