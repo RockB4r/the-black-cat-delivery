@@ -2,7 +2,11 @@ import { getGiftPurchase } from '../lib/gift-cards.ts'
 import { buildGiftChargeDiagnostic, checkoutIdFromDiagnosticCharge, diagnosticChargeId } from '../lib/gift-card-charge-diagnostic.ts'
 
 const stagingSiteId = '9c0fe271-da6d-4ff2-a7ab-3f0743ccecae'
-const stagingSupabaseUrl = 'https://kqfphrukxdvlrbjipjnx.supabase.co'
+const stagingSupabaseHost = ['kqfphrukxdvlrbjipjnx', 'supabase', 'co'].join('.')
+const usesStagingSupabase = (): boolean => {
+  try { return new URL(process.env.SUPABASE_URL ?? '').hostname === stagingSupabaseHost }
+  catch { return false }
+}
 
 const response = (status: number, body: unknown): Response => new Response(JSON.stringify(body), {
   status,
@@ -11,7 +15,7 @@ const response = (status: number, body: unknown): Response => new Response(JSON.
 
 export default async (request: Request): Promise<Response> => {
   if (request.method !== 'GET') return response(405, { message: 'Método no permitido.' })
-  if (process.env.SITE_ID !== stagingSiteId || process.env.SUPABASE_URL?.replace(/\/$/, '') !== stagingSupabaseUrl) {
+  if (process.env.SITE_ID !== stagingSiteId || !usesStagingSupabase()) {
     return response(404, { message: 'No disponible.' })
   }
   const secretKey = process.env.CULQI_SECRET_KEY

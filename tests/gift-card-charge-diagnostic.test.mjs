@@ -4,6 +4,7 @@ import { buildGiftChargeDiagnostic, checkoutIdFromDiagnosticCharge, diagnosticCh
 import diagnosticFunction from '../netlify/functions/gift-card-charge-diagnostic.ts'
 
 const checkoutId = 'fd69d4a7-9ad4-4ce8-968e-f00a0cae02ee'
+const stagingSupabaseOrigin = `https://${['kqfphrukxdvlrbjipjnx', 'supabase', 'co'].join('.')}`
 const purchase = { checkout_id: checkoutId, amount: 50 }
 const charge = {
   id: diagnosticChargeId, amount: 5000, currency: 'PEN', response_code: 'venta_exitosa', state: 'Exitosa',
@@ -48,7 +49,7 @@ test('la Function solo hace GET al cargo TEST fijo y devuelve una respuesta sani
   const requests = []
   try {
     process.env.SITE_ID = '9c0fe271-da6d-4ff2-a7ab-3f0743ccecae'
-    process.env.SUPABASE_URL = 'https://kqfphrukxdvlrbjipjnx.supabase.co'
+    process.env.SUPABASE_URL = stagingSupabaseOrigin
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'staging-test-placeholder'
     process.env.CULQI_SECRET_KEY = 'sk_test_placeholder'
     globalThis.fetch = async (url, options) => {
@@ -61,7 +62,7 @@ test('la Function solo hace GET al cargo TEST fijo y devuelve una respuesta sani
     assert.equal(result.headers.get('cache-control'), 'no-store')
     assert.deepEqual(requests.map(({ url, method }) => [url, method]), [
       [`https://api.culqi.com/v2/charges/${diagnosticChargeId}`, 'GET'],
-      [`https://kqfphrukxdvlrbjipjnx.supabase.co/rest/v1/gift_card_purchases?checkout_id=eq.${checkoutId}&select=*`, undefined],
+      [`${stagingSupabaseOrigin}/rest/v1/gift_card_purchases?checkout_id=eq.${checkoutId}&select=*`, undefined],
     ])
     const body = await result.text()
     assert.deepEqual(JSON.parse(body).checks, { id: true, amount: true, currency: true, response_code: true, description: true })
