@@ -21,7 +21,8 @@ export default async (request: Request): Promise<Response> => {
     const result: unknown = await response.json().catch(() => null)
     if (!response.ok || !result || typeof result !== 'object') return json(200, { status: 'pending' })
     const amountInCents = Math.round(Number(purchase.amount) * 100)
-    const chargeApproved = chargeId && confirmedCulqiCharge(result, { id: chargeId, amountInCents, description: `Gift Card ${purchase.checkout_id}` })
+    const chargeApproved = chargeId && confirmedCulqiCharge(result, { id: chargeId, amountInCents,
+      description: `Gift Card ${purchase.checkout_id}`, checkoutId: purchase.checkout_id, allowMissingStatus: true })
     const orderExpected = purchase.culqi_order_id ? { id: purchase.culqi_order_id, orderNumber: culqiGiftCardOrderNumber(purchase.checkout_id), amountInCents } : null
     const orderApproved = orderExpected && confirmedCulqiOrder(result, orderExpected)
     if (orderApproved || chargeApproved) {

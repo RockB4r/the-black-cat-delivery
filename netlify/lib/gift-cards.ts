@@ -192,7 +192,8 @@ export const reconcileExpiredGiftReservations = async (cardId: string) => {
       const chargeResponse = await fetch(`https://api.culqi.com/v2/charges/${encodeURIComponent(order.culqi_charge_id)}`, { headers: { Authorization: `Bearer ${key}` } })
       const charge: unknown = await chargeResponse.json().catch(() => null)
       if (!chargeResponse.ok) throw new Error('Culqi charge reconciliation is unavailable')
-      if (confirmedCulqiCharge(charge, { id: order.culqi_charge_id, amountInCents: Math.round(Number(payment.other_amount) * 100), description: `Pedido ${order.order_number}` })) {
+      if (confirmedCulqiCharge(charge, { id: order.culqi_charge_id, amountInCents: Math.round(Number(payment.other_amount) * 100),
+        description: `Pedido ${order.order_number}`, checkoutId: payment.checkout_id, allowMissingStatus: true })) {
         await setGiftPaymentState(payment.order_id, 'paid')
         await applyGiftToOrder(payment.order_id, order.culqi_charge_id)
         const stored = await getOrder(order.order_number)

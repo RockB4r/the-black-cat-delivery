@@ -4,6 +4,8 @@ begin;
 do $$
 declare
   v_checkout uuid := gen_random_uuid();
+  v_charge_checkout uuid := gen_random_uuid();
+  v_charge_id text := 'chr_test_' || left(replace(v_charge_checkout::text,'-',''),16);
   v_card public.gift_cards;
   v_order_id uuid;
   v_order_checkout uuid := gen_random_uuid();
@@ -41,6 +43,21 @@ begin
   if (select count(*) from public.gift_cards where culqi_order_id='ord_test_phase2_' || v_checkout::text) <> 1 then
     raise exception 'Purchase idempotency failed';
   end if;
+
+  insert into public.gift_card_purchases(checkout_id,amount,purchaser_name,purchaser_email,transferable,delivery_method,culqi_charge_id)
+    values (v_charge_checkout,50,'Compra prueba','test@example.invalid',true,'personal',v_charge_id);
+  perform public.finalize_gift_card_purchase(v_charge_checkout,null,v_charge_id);
+  perform public.finalize_gift_card_purchase(v_charge_checkout,null,v_charge_id);
+  if (select count(*) from public.gift_cards where culqi_charge_id=v_charge_id) <> 1
+    or (select count(*) from public.gift_card_transactions where source_reference='gift_purchase:' || v_charge_checkout::text) <> 1 then
+    raise exception 'Same checkout and charge were not idempotent';
+  end if;
+  begin
+    insert into public.gift_card_purchases(checkout_id,amount,purchaser_name,purchaser_email,transferable,delivery_method,culqi_charge_id)
+      values (gen_random_uuid(),50,'Compra prueba','test@example.invalid',true,'personal',v_charge_id);
+    raise exception 'A reused charge was accepted';
+  exception when unique_violation then null;
+  end;
 
   insert into public.orders(order_number,checkout_id,customer_name,customer_phone,order_type,payment_method,payment_status,subtotal,total,receipt_type)
     values ('TBC-TEST-' || left(v_order_checkout::text,8),v_order_checkout,'Cliente prueba','999999999','pick_up','wallet','pending',80,80,'boleta') returning id into v_order_id;

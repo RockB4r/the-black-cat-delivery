@@ -38,13 +38,15 @@ export default async (request: Request): Promise<Response> => {
       body: JSON.stringify({
         amount: Math.round(Number(purchase.amount) * 100), currency_code: 'PEN', email: purchase.purchaser_email,
         description: `Gift Card ${purchase.checkout_id}`, source_id: token, capture: true,
+        metadata: { checkout_id: purchase.checkout_id },
         antifraud_details: { address: 'Grau 184', address_city: 'Barranca', country_code: 'PE', first_name: firstName,
           last_name: lastName.join(' ') || 'Cliente', ...(purchase.purchaser_phone ? { phone_number: purchase.purchaser_phone.replace(/\D/g, '') } : {}) },
       }),
     })
     const charge: unknown = await response.json().catch(() => null)
     const chargeId = charge && typeof charge === 'object' && 'id' in charge && typeof charge.id === 'string' ? charge.id : ''
-    const approved = confirmedCulqiCharge(charge, { id: chargeId, amountInCents: Math.round(Number(purchase.amount) * 100), description: `Gift Card ${purchase.checkout_id}` })
+    const approved = confirmedCulqiCharge(charge, { id: chargeId, amountInCents: Math.round(Number(purchase.amount) * 100),
+      description: `Gift Card ${purchase.checkout_id}`, checkoutId: purchase.checkout_id, allowMissingStatus: response.status === 201 })
     if (!response.ok || !chargeId.startsWith('chr_') || !approved) {
       if (response.status >= 400 && response.status < 500) await giftChargeLock().delete(purchase.checkout_id)
       console.error('Gift Card Culqi charge rejected:', response.status)

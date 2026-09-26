@@ -118,6 +118,7 @@ export default async (request: Request): Promise<Response> => {
         description: `Pedido ${order.orderId}`,
         source_id: token,
         capture: true,
+        ...(giftPayment ? { metadata: { checkout_id: input.checkoutId } } : {}),
         antifraud_details: {
           address: order.address || 'Recojo en local',
           address_city: 'Barranca',
@@ -166,7 +167,8 @@ export default async (request: Request): Promise<Response> => {
     if (!chargeId) throw new Error('Culqi did not return a charge identifier.')
     if (giftPayment) {
       if (!order.databaseOrderId) throw new Error('Gift Card order has no database identifier')
-      if (!confirmedCulqiCharge(culqiData, { id: chargeId, amountInCents: amount as number, description: `Pedido ${order.orderId}` })) throw new Error('Culqi charge is not confirmed for this order and amount')
+      if (!confirmedCulqiCharge(culqiData, { id: chargeId, amountInCents: amount as number,
+        description: `Pedido ${order.orderId}`, checkoutId: input.checkoutId, allowMissingStatus: culqiResponse.status === 201 })) throw new Error('Culqi charge is not confirmed for this order and amount')
       await linkMixedCulqiCharge(order.databaseOrderId, chargeId)
       await setGiftPaymentState(order.databaseOrderId, 'paid')
       await applyGiftToOrder(order.databaseOrderId, chargeId)

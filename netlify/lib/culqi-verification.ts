@@ -42,15 +42,22 @@ export const expiredCulqiOrder = (value: unknown, expected: {
 }
 
 export const confirmedCulqiCharge = (value: unknown, expected: {
-  amountInCents: number; description: string; id?: string
+  amountInCents: number; description: string; id: string; checkoutId?: string; allowMissingStatus?: boolean
 }): boolean => {
   const charge = record(value)
+  const metadata = record(charge?.metadata)
+  const currency = charge?.currency
+  const currencyCode = charge?.currency_code
   return !!charge
     && typeof charge.id === 'string'
     && charge.id.startsWith('chr_')
-    && (!expected.id || charge.id === expected.id)
-    && charge.response_code === 'venta_exitosa'
+    && charge.id === expected.id
+    && (charge.response_code === 'venta_exitosa' || (charge.response_code == null && expected.allowMissingStatus === true))
+    && (charge.state == null || charge.state === 'Exitosa')
     && cents(charge.amount) === expected.amountInCents
-    && (charge.currency === 'PEN' || charge.currency_code === 'PEN')
-    && (charge.description === expected.description || charge.description === null)
+    && (currency === 'PEN' || currencyCode === 'PEN')
+    && (currency == null || currency === 'PEN')
+    && (currencyCode == null || currencyCode === 'PEN')
+    && charge.description === expected.description
+    && (metadata?.checkout_id == null || metadata.checkout_id === expected.checkoutId)
 }
