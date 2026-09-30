@@ -4,6 +4,7 @@ import type { MenuCategory, MenuItem } from './data/types'
 import { productKey } from './data/productKeys'
 import { isOnlineOrderingOpen, onlineOrderingHours } from './lib/onlineOrdering'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
+import { normalizeGiftPaymentCode } from './lib/giftPaymentCode'
 import './App.css'
 
 type CartItem = { id: string; productKey: string; name: string; price: number; quantity: number; note?: string; style?: string; sauce?: string }
@@ -93,6 +94,7 @@ function App() {
   const hasValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim())
   const canPayWithCulqi = cartItems.length > 0 && totalAfterDiscount > 0 && hasValidEmail
   const isCashPayment = paymentMethod === 'Efectivo'
+  const normalizedGiftPaymentCode = normalizeGiftPaymentCode(giftPaymentCode)
   const culqiPublicKey = import.meta.env.VITE_CULQI_PUBLIC_KEY
   const orderingOpen = !manualKitchenClosed && (scheduleOpen || forceKitchenOpen)
   const kitchenClosedMessage = manualKitchenClosed
@@ -185,6 +187,10 @@ function App() {
       setCulqiMessage('El DNI debe tener exactamente 8 dígitos.')
       return null
     }
+    if (paymentMethod === 'Gift Card' && !normalizedGiftPaymentCode) {
+      setCulqiMessage('Ingresa el código de pago válido de 32 caracteres de tu Gift Card.')
+      return null
+    }
     const checkoutId = checkoutIdRef.current ?? crypto.randomUUID()
     checkoutIdRef.current = checkoutId
     return {
@@ -198,7 +204,7 @@ function App() {
       ...(receiptType === 'boleta' && dni ? { dni } : {}),
       ...(receiptType === 'factura' ? { ruc } : {}),
       ...(receiptType === 'factura' ? { receiptLegalName: receiptLegalName.trim() } : {}),
-      ...(paymentMethod === 'Gift Card' ? { giftPaymentCode: giftPaymentCode.trim().toLowerCase() } : {}),
+      ...(paymentMethod === 'Gift Card' ? { giftPaymentCode: normalizedGiftPaymentCode } : {}),
       ...(appliedPromotion ? { promotionCode: appliedPromotion.code } : {}),
       items: cartItems.map(({ name, quantity, note, style, sauce }) => ({ name, quantity, note, style, sauce })),
     }
@@ -282,9 +288,13 @@ function App() {
   }
 
   const checkGiftCard = async () => {
+    if (!normalizedGiftPaymentCode) {
+      setCulqiMessage('Ingresa el código de pago válido de 32 caracteres de tu Gift Card.')
+      return
+    }
     setIsCheckingGift(true); setGiftBalance(null); setCulqiMessage('')
     try {
-      const response = await fetch('/.netlify/functions/gift-card-quote', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ paymentCode: giftPaymentCode.trim().toLowerCase() }) })
+      const response = await fetch('/.netlify/functions/gift-card-quote', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ paymentCode: normalizedGiftPaymentCode }) })
       const data = await response.json() as { balance?: number; requiresRecipientVerification?: boolean; message?: string }
       if (!response.ok || typeof data.balance !== 'number') { setCulqiMessage(data.message ?? 'No se pudo validar la Gift Card.'); return }
       setGiftBalance(data.balance)
@@ -697,7 +707,7 @@ function App() {
                       </label>
                     ))}
                   </div>
-                  {paymentMethod === 'Gift Card' && <div className="promotion-fieldset"><p>Ingresa el código de pago que aparece en tu Gift Card digital. Si el saldo no cubre todo el pedido, paga la diferencia con Culqi.</p><div className="promotion-code-row"><input aria-label="Código de pago Gift Card" value={giftPaymentCode} onChange={(event) => { setGiftPaymentCode(event.target.value); setGiftBalance(null); setGiftRequiresRecipient(false); checkoutIdRef.current = crypto.randomUUID(); internalOrderIdRef.current = null }} placeholder="Código de pago" maxLength={32} /><button className="staff-secondary" type="button" disabled={isCheckingGift || giftPaymentCode.trim().length !== 32} onClick={() => { void checkGiftCard() }}>Consultar saldo</button></div>{giftBalance !== null && <p role="status">Saldo disponible: S/ {giftBalance.toFixed(2)}. {giftBalance < totalAfterDiscount ? `Restante estimado: S/ ${(totalAfterDiscount - giftBalance).toFixed(2)}.` : 'Cubre el pedido completo.'}{giftRequiresRecipient && ' El nombre del pedido debe coincidir con el beneficiario registrado.'}</p>}</div>}
+                  {paymentMethod === 'Gift Card' && <div className="promotion-fieldset"><p>Ingresa el código de pago que aparece en tu Gift Card digital. Si el saldo no cubre todo el pedido, paga la diferencia con Culqi.</p><div className="promotion-code-row"><input aria-label="Código de pago Gift Card" value={giftPaymentCode} onChange={(event) => { setGiftPaymentCode(event.target.value); setGiftBalance(null); setGiftRequiresRecipient(false); checkoutIdRef.current = crypto.randomUUID(); internalOrderIdRef.current = null }} placeholder="Código de pago de 32 caracteres" maxLength={64} /><button className="staff-secondary" type="button" disabled={isCheckingGift || !normalizedGiftPaymentCode} onClick={() => { void checkGiftCard() }}>Consultar saldo</button></div>{giftPaymentCode && !normalizedGiftPaymentCode && <p className="promotion-help" role="status">Usa el código de pago de 32 caracteres; puedes pegarlo con guiones o espacios. No uses el código BC-GC.</p>}{giftBalance !== null && <p role="status">Saldo disponible: S/ {giftBalance.toFixed(2)}. {giftBalance < totalAfterDiscount ? `Restante estimado: S/ ${(totalAfterDiscount - giftBalance).toFixed(2)}.` : 'Cubre el pedido completo.'}{giftRequiresRecipient && ' El nombre del pedido debe coincidir con el beneficiario registrado.'}</p>}</div>}
                 </fieldset>
                 <div className="checkout-total"><span>Subtotal</span><strong>S/ {subtotal.toFixed(2)}</strong></div>
                 {appliedPromotion && <div className="checkout-discount"><span>Descuento {appliedPromotion.code} ({appliedPromotion.discountPercent}%)</span><strong>-S/ {discountAmount.toFixed(2)}</strong></div>}

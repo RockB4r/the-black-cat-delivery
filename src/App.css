@@ -46,6 +46,7 @@ footer {
 .staff-primary { min-height: 44px; align-self: end; color: #11100f; border: 0; border-radius: 4px; background: #f7bd3a; padding: 11px 15px; font-weight: 900; }
 .staff-primary:disabled { opacity: .5; cursor: not-allowed; }
 .staff-secondary { min-height: 42px; color: #fff7e8; border: 1px solid rgba(255,246,230,.22); border-radius: 4px; background: transparent; padding: 10px 13px; font-weight: 800; white-space: nowrap; }
+.promotion-code-row .staff-secondary:disabled { opacity: .48; cursor: not-allowed; }
 .staff-create-form { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 20px; padding: 20px; border: 1px solid rgba(247,189,58,.26); border-radius: 6px; background: rgba(48,42,32,.55); }.staff-create-form h3, .staff-create-form .staff-checkbox, .staff-create-form .staff-primary { grid-column: 1 / -1; }.staff-create-form small { color: #a89e91; font-weight: 400; }.staff-checkbox { display: flex !important; align-items: center; gap: 9px; color: #d5ccc0; cursor: pointer; }.staff-checkbox input { width: 16px; height: 16px; margin: 0; accent-color: #f7bd3a; }
 .member-summary { display: flex; justify-content: space-between; align-items: end; gap: 20px; }
 .member-summary h2 { margin-bottom: 10px; }

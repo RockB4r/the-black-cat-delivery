@@ -7,6 +7,7 @@ import { applyGiftToOrder, getOrderGiftPayment, linkMixedCulqiOrder, reserveGift
 import { notifyOrder } from '../lib/notifications'
 import { getStore } from '@netlify/blobs'
 import { matchingCulqiOrder } from '../lib/culqi-verification'
+import { normalizeGiftPaymentCode } from '../../src/lib/giftPaymentCode'
 
 export default async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') return json(405, { message: 'Método no permitido.' })
@@ -15,8 +16,9 @@ export default async (request: Request): Promise<Response> => {
   const body: unknown = await request.json().catch(() => null)
   const input = parseOrderInput(body, 'wallet')
   const data = body as Record<string, unknown> | null
-  const giftPaymentCode = typeof data?.giftPaymentCode === 'string' ? data.giftPaymentCode.trim().toLowerCase() : ''
-  if (giftPaymentCode && !/^[a-f0-9]{32}$/.test(giftPaymentCode)) return json(400, { message: 'Código de Gift Card inválido.' })
+  const rawGiftPaymentCode = typeof data?.giftPaymentCode === 'string' ? data.giftPaymentCode : ''
+  const giftPaymentCode = rawGiftPaymentCode ? normalizeGiftPaymentCode(rawGiftPaymentCode) : null
+  if (rawGiftPaymentCode && !giftPaymentCode) return json(400, { message: 'Código de Gift Card inválido.' })
   if (!input || data?.currency !== 'PEN') return json(400, { message: 'Los datos del pedido no son válidos.' })
   const secretKey = process.env.CULQI_SECRET_KEY
 
