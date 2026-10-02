@@ -53,6 +53,7 @@ export const giftCardDeliveryDraft = (purchase: GiftPurchase, receipt: GiftRecei
   return { subject, content, recipientEmail: purchase.recipient_email, recipientPhone: purchase.recipient_phone, deliveryMethod: purchase.delivery_method, link, taxNote }
 }
 export type OrderGiftPayment = { checkout_id: string; order_id: string; gift_card_id: string; gift_amount: number; other_amount: number; status: 'reserved' | 'applied' | 'released' | 'refunded'; payment_state: 'pending' | 'payment_pending' | 'reconciliation_required' | 'paid' | 'failed' | 'expired' | 'released' | 'applied'; reserved_at: string; expires_at: string; culqi_reference: string | null }
+export type MixedCulqiAttempt = { id: string; checkout_id: string; order_id: string; culqi_order_id: string; gift_amount: number; culqi_amount: number; status: 'processing' | 'rejected' | 'reconciliation_required' | 'approved' | 'cleared_no_charge'; culqi_charge_id: string | null; created_at: string }
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -176,11 +177,15 @@ const cardByPaymentCode = (paymentCode: string) =>
 // An expired mixed reservation is reconciled against Culqi before releasing it.
 // No cron is required: quote and reserve requests trigger reconciliation.
 export const reconcileExpiredGiftReservations = async (cardId: string) => {
-  const { getOrder, saveOrder } = await import('./orders')
   const rows = await database<OrderGiftPayment[]>(`gift_card_order_payments?gift_card_id=eq.${encodeURIComponent(cardId)}&status=eq.reserved&expires_at=lte.${encodeURIComponent(new Date().toISOString())}&select=*`)
   for (const payment of rows) {
     const order = one(await database<Array<{ id: string; order_number: string; culqi_order_id: string | null; culqi_charge_id: string | null; payment_status: string }>>(`orders?id=eq.${encodeURIComponent(payment.order_id)}&select=id,order_number,culqi_order_id,culqi_charge_id,payment_status`))
     if (!order) throw new Error('Expired Gift Card reservation has no order')
+    if (payment.other_amount > 0 && await hasUnresolvedMixedCulqiAttempt(payment.order_id)) {
+      await setGiftPaymentState(payment.order_id, 'reconciliation_required')
+      continue
+    }
+    const { getOrder, saveOrder } = await import('./orders')
     if (payment.other_amount === 0 || (!order.culqi_order_id && !order.culqi_charge_id)) {
       await setGiftPaymentState(payment.order_id, 'expired')
       await releaseGiftReservation(payment.order_id)
@@ -245,6 +250,23 @@ export const reserveGiftForOrder = async (orderId: string, checkoutId: string, p
 }
 
 export const getOrderGiftPayment = async (orderId: string) => one(await database<OrderGiftPayment[]>(`gift_card_order_payments?order_id=eq.${encodeURIComponent(orderId)}&select=*`))
+export const getMixedCulqiAttempts = (orderId: string) => database<MixedCulqiAttempt[]>(`gift_card_culqi_attempts?order_id=eq.${encodeURIComponent(orderId)}&select=*&order=created_at.desc`)
+export const hasUnresolvedMixedCulqiAttempt = async (orderId: string) => {
+  const rows = await database<Array<{ id: string }>>(`gift_card_culqi_attempts?order_id=eq.${encodeURIComponent(orderId)}&status=in.(processing,reconciliation_required)&select=id&limit=1`)
+  return rows.length > 0
+}
+export const beginMixedCulqiAttempt = (orderId: string, checkoutId: string, culqiOrderId: string) => database<{ id: string; status: string }>('rpc/begin_mixed_culqi_attempt', {
+  method: 'POST', body: JSON.stringify({ p_order_id: orderId, p_checkout_id: checkoutId, p_culqi_order_id: culqiOrderId }),
+})
+export const markMixedCulqiAttempt = (attemptId: string, status: 'rejected' | 'reconciliation_required', source: string) => database<boolean>('rpc/mark_mixed_culqi_attempt', {
+  method: 'POST', body: JSON.stringify({ p_attempt_id: attemptId, p_status: status, p_source: source }),
+})
+export const completeMixedCulqiAttempt = (orderId: string, attemptId: string, culqiReference: string, chargeId: string | null, source: string, actor: string | null = null, note: string | null = null) => database<{ gift_amount?: number; other_amount?: number; idempotent: boolean }>('rpc/complete_mixed_culqi_attempt', {
+  method: 'POST', body: JSON.stringify({ p_order_id: orderId, p_attempt_id: attemptId, p_culqi_reference: culqiReference, p_charge_id: chargeId, p_source: source, p_actor: actor, p_note: note }),
+})
+export const clearMixedCulqiAttempt = (orderId: string, attemptId: string, actor: string, note: string) => database<boolean>('rpc/clear_mixed_culqi_attempt', {
+  method: 'POST', body: JSON.stringify({ p_order_id: orderId, p_attempt_id: attemptId, p_actor: actor, p_note: note }),
+})
 export const getLinkedMixedCulqiCharge = async (orderId: string) => {
   const row = one(await database<Array<{ culqi_charge_id: string | null }>>(`orders?id=eq.${encodeURIComponent(orderId)}&select=culqi_charge_id`))
   return row?.culqi_charge_id ?? null

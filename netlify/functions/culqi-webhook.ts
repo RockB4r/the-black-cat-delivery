@@ -1,7 +1,7 @@
 import { notifyOrder } from '../lib/notifications'
 import { getOrder, getOrderIdByCulqiOrder, saveOrder } from '../lib/orders'
 import { confirmPromotionUse, releasePromotion } from '../lib/promotions'
-import { applyGiftToOrder, finalizeGiftPurchase, getGiftPurchaseByCulqiOrder, getLinkedMixedCulqiCharge, getOrderGiftPayment, markMixedCulqiExpired, releaseGiftReservation, setGiftPaymentState } from '../lib/gift-cards'
+import { applyGiftToOrder, completeMixedCulqiAttempt, finalizeGiftPurchase, getGiftPurchaseByCulqiOrder, getLinkedMixedCulqiCharge, getMixedCulqiAttempts, getOrderGiftPayment, markMixedCulqiAttempt, markMixedCulqiExpired, releaseGiftReservation, setGiftPaymentState } from '../lib/gift-cards'
 import { culqiGiftCardOrderNumber, confirmedCulqiOrder, expiredCulqiOrder } from '../lib/culqi-verification'
 
 const response = (status: number) => new Response(null, { status })
@@ -40,8 +40,12 @@ export default async (request: Request): Promise<Response> => {
     if (state === 'paid' && order.paymentStatus !== 'paid') {
       const operationId = 'id' in culqiOrder && typeof culqiOrder.id === 'string' ? culqiOrder.id : undefined
       if (giftPayment) {
-        await setGiftPaymentState(giftPayment.order_id, 'paid')
-        await applyGiftToOrder(giftPayment.order_id, operationId ?? culqiOrderId)
+        if (giftPayment.status === 'reserved') {
+          const attempts = await getMixedCulqiAttempts(giftPayment.order_id)
+          const unresolved = attempts.find((attempt) => attempt.status === 'processing' || attempt.status === 'reconciliation_required')
+          if (unresolved) await completeMixedCulqiAttempt(giftPayment.order_id, unresolved.id, operationId ?? culqiOrderId, null, 'culqi_webhook_paid')
+          else await applyGiftToOrder(giftPayment.order_id, operationId ?? culqiOrderId)
+        } else if (giftPayment.status !== 'applied') return response(409)
       }
       const paidOrder = { ...order, paymentStatus: 'paid' as const, culqiOrderId: operationId ?? order.culqiOrderId,
         ...(giftPayment ? { paymentMethod: 'gift_card_culqi' as const, giftCardAmount: giftPayment.gift_amount, otherPaymentAmount: giftPayment.other_amount, otherPaymentMethod: 'culqi' } : {}) }
@@ -50,6 +54,14 @@ export default async (request: Request): Promise<Response> => {
       await notifyOrder(paidOrder)
     } else if (state === 'expired' && order.paymentStatus === 'pending') {
       if (giftPayment) {
+        if (giftPayment.status === 'applied') return response(200)
+        const attempts = await getMixedCulqiAttempts(giftPayment.order_id)
+        const unresolved = attempts.find((attempt) => attempt.status === 'processing' || attempt.status === 'reconciliation_required')
+        if (unresolved) {
+          if (unresolved.status === 'processing') await markMixedCulqiAttempt(unresolved.id, 'reconciliation_required', 'culqi_order_expired')
+          else await setGiftPaymentState(giftPayment.order_id, 'reconciliation_required')
+          return response(200)
+        }
         if (await getLinkedMixedCulqiCharge(giftPayment.order_id)) {
           await setGiftPaymentState(giftPayment.order_id, 'reconciliation_required')
           console.error('Gift Card mixed payment requires charge reconciliation before release')

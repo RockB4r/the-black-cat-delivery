@@ -5,7 +5,7 @@ import { json, parseOrderInput } from '../lib/request'
 import { getOnlineOrderingAvailability } from '../lib/online-ordering'
 import { getUnavailableProducts, ProductAvailabilityError } from '../lib/product-availability'
 import { confirmPromotionUse, releasePromotion } from '../lib/promotions'
-import { applyGiftToOrder, getOrderGiftPayment, linkMixedCulqiCharge, setGiftPaymentState } from '../lib/gift-cards'
+import { applyGiftToOrder, beginMixedCulqiAttempt, completeMixedCulqiAttempt, getMixedCulqiAttempts, getOrderGiftPayment, markMixedCulqiAttempt } from '../lib/gift-cards'
 import { confirmedCulqiCharge, confirmedCulqiOrder, expiredCulqiOrder, matchingCulqiOrder } from '../lib/culqi-verification'
 
 type CulqiErrorData = {
@@ -60,6 +60,7 @@ export default async (request: Request): Promise<Response> => {
   if (giftPayment && (!order.culqiOrderId || new Date(giftPayment.expires_at).getTime() <= Date.now())) return json(409, { approved: false, message: 'La reserva de Gift Card venció o aún no tiene una orden Culqi vinculada.' })
 
   let chargeAttempted = false
+  let mixedAttemptId: string | null = null
   try {
     const unavailableProducts = await getUnavailableProducts(order.items)
     if (unavailableProducts.length) return json(409, { approved: false, code: 'PRODUCT_UNAVAILABLE', unavailable_products: unavailableProducts, message: 'Uno o más productos ya no están disponibles.' })
@@ -88,8 +89,10 @@ export default async (request: Request): Promise<Response> => {
       const expected = { id: order.culqiOrderId, orderNumber: order.orderId, amountInCents: amount as number }
       if (state === 'paid' && !confirmedCulqiOrder(culqiOrder, expected)) throw new Error('Culqi paid order does not match this checkout')
       if (state === 'paid') {
-        await setGiftPaymentState(order.databaseOrderId, 'paid')
-        await applyGiftToOrder(order.databaseOrderId, order.culqiOrderId)
+        const attempts = await getMixedCulqiAttempts(order.databaseOrderId)
+        const unresolved = attempts.find((attempt) => attempt.status === 'processing' || attempt.status === 'reconciliation_required')
+        if (unresolved) await completeMixedCulqiAttempt(order.databaseOrderId, unresolved.id, order.culqiOrderId, null, 'verified_order')
+        else await applyGiftToOrder(order.databaseOrderId, order.culqiOrderId)
         const paidOrder: StoreOrder = { ...order, paymentMethod: 'gift_card_culqi', paymentStatus: 'paid', giftCardAmount: giftPayment.gift_amount, otherPaymentAmount: giftPayment.other_amount, otherPaymentMethod: paymentMethod }
         await saveOrder(paidOrder)
         if (paidOrder.discountCode) await confirmPromotionUse({ checkoutId: paidOrder.checkoutId, orderId: paidOrder.orderId })
@@ -104,6 +107,10 @@ export default async (request: Request): Promise<Response> => {
     }
     const { firstName, lastName } = customerNames(order.customer)
     const phoneNumber = order.phone.replace(/\D/g, '')
+    if (giftPayment && order.databaseOrderId && order.culqiOrderId) {
+      const attempt = await beginMixedCulqiAttempt(order.databaseOrderId, input.checkoutId, order.culqiOrderId)
+      mixedAttemptId = attempt.id
+    }
     chargeAttempted = true
     const culqiResponse = await fetch('https://api.culqi.com/v2/charges', {
       method: 'POST',
@@ -118,7 +125,7 @@ export default async (request: Request): Promise<Response> => {
         description: `Pedido ${order.orderId}`,
         source_id: token,
         capture: true,
-        ...(giftPayment ? { metadata: { checkout_id: input.checkoutId } } : {}),
+        ...(giftPayment ? { metadata: { checkout_id: input.checkoutId, attempt_id: mixedAttemptId } } : {}),
         antifraud_details: {
           address: order.address || 'Recojo en local',
           address_city: 'Barranca',
@@ -138,8 +145,13 @@ export default async (request: Request): Promise<Response> => {
         if (giftPayment && order.databaseOrderId) {
           // This charge attempt failed; the Culqi order may still be payable.
           // Keep the Gift Card reservation until that order is resolved.
-          try { await setGiftPaymentState(order.databaseOrderId, 'failed') }
-          catch (error) { console.error('Gift Card failed-attempt state update failed:', error instanceof Error ? error.message : 'Unknown error') }
+          if (mixedAttemptId) {
+            try { await markMixedCulqiAttempt(mixedAttemptId, 'rejected', 'culqi_http_4xx') }
+            catch (error) {
+              console.error('Gift Card rejected-attempt state update failed:', error instanceof Error ? error.message : 'Unknown error')
+              return json(502, { approved: false, message: 'El intento requiere verificación. No repitas el cargo.' })
+            }
+          }
         }
         await getStore({ name: 'the-black-cat-payment-locks', consistency: 'strong' }).delete(paymentLockKey)
         if (order.discountCode) {
@@ -156,6 +168,7 @@ export default async (request: Request): Promise<Response> => {
         })
       }
 
+      if (mixedAttemptId) await markMixedCulqiAttempt(mixedAttemptId, 'reconciliation_required', 'culqi_http_5xx').catch((error: unknown) => console.error('Could not persist uncertain payment state:', error instanceof Error ? error.message : 'Unknown error'))
       if (!giftPayment) await getStore({ name: 'the-black-cat-payment-locks', consistency: 'strong' }).delete(paymentLockKey)
       return json(502, { approved: false, message: giftPayment ? 'El pago requiere verificación. No repitas el cargo; contacta al bar con tu pedido.' : 'No fue posible procesar el pago. Inténtalo nuevamente.' })
     }
@@ -169,9 +182,8 @@ export default async (request: Request): Promise<Response> => {
       if (!order.databaseOrderId) throw new Error('Gift Card order has no database identifier')
       if (!confirmedCulqiCharge(culqiData, { id: chargeId, amountInCents: amount as number,
         description: `Pedido ${order.orderId}`, checkoutId: input.checkoutId, allowMissingStatus: culqiResponse.status === 201 })) throw new Error('Culqi charge is not confirmed for this order and amount')
-      await linkMixedCulqiCharge(order.databaseOrderId, chargeId)
-      await setGiftPaymentState(order.databaseOrderId, 'paid')
-      await applyGiftToOrder(order.databaseOrderId, chargeId)
+      if (!mixedAttemptId) throw new Error('Mixed Culqi attempt was not persisted')
+      await completeMixedCulqiAttempt(order.databaseOrderId, mixedAttemptId, chargeId, chargeId, 'culqi_charge')
     }
     const paidOrder: StoreOrder = { ...order, paymentMethod: giftPayment ? 'gift_card_culqi' : paymentMethod, paymentStatus: 'paid', culqiChargeId: chargeId,
       ...(giftPayment ? { giftCardAmount: giftPayment.gift_amount, otherPaymentAmount: giftPayment.other_amount, otherPaymentMethod: paymentMethod } : {}) }
@@ -198,6 +210,7 @@ export default async (request: Request): Promise<Response> => {
     }
     return json(200, { approved: true, chargeId, orderId: order.orderId })
   } catch (error) {
+    if (mixedAttemptId && chargeAttempted) await markMixedCulqiAttempt(mixedAttemptId, 'reconciliation_required', 'culqi_ambiguous').catch((markError: unknown) => console.error('Could not persist uncertain payment state:', markError instanceof Error ? markError.message : 'Unknown error'))
     if (!giftPayment || !chargeAttempted) await getStore({ name: 'the-black-cat-payment-locks', consistency: 'strong' }).delete(paymentLockKey)
     console.error('Culqi charge request failed:', error instanceof Error ? error.message : 'Unknown error')
     return json(502, { approved: false, message: giftPayment && chargeAttempted ? 'El pago requiere verificación. No repitas el cargo; contacta al bar con tu pedido.' : 'No fue posible conectar con el servicio de pago. Inténtalo nuevamente.' })
