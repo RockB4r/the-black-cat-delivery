@@ -11,7 +11,7 @@ const rejectionReasons = ['Stock agotado', 'Producto no disponible', 'Cocina cer
 type RejectionReason = typeof rejectionReasons[number]
 type KitchenStatus = 'nuevo' | 'preparando' | 'listo' | 'en_camino' | 'entregado' | 'cancelado' | 'rechazado'
 type KitchenItem = { id: string; product_name: string; category: string; quantity: number; unit_price: number; notes: string | null }
-type KitchenOrder = { id: string; order_number: string; customer_name: string; customer_phone: string; order_type: 'delivery' | 'pick_up'; delivery_address: string | null; delivery_reference: string | null; payment_status: string; receipt_type: 'boleta' | 'factura' | null; receipt_document_number: string | null; status: KitchenStatus; total: number; notes: string | null; created_at: string; order_items: KitchenItem[] }
+type KitchenOrder = { id: string; order_number: string; customer_name: string; customer_phone: string; order_type: 'delivery' | 'pick_up'; delivery_address: string | null; delivery_reference: string | null; payment_status: string; receipt_type: 'boleta' | 'factura' | null; receipt_document_number: string | null; receipt_legal_name: string | null; gift_card_amount: number; other_payment_amount: number; status: KitchenStatus; total: number; notes: string | null; created_at: string; order_items: KitchenItem[] }
 type KitchenAvailability = { manual_closed: boolean; force_open: boolean }
 
 const columns: Array<{ title: string; status: KitchenStatus }> = [{ title: 'Nuevos pedidos', status: 'nuevo' }, { title: 'Preparando', status: 'preparando' }, { title: 'Listos', status: 'listo' }]
@@ -80,7 +80,7 @@ export function KitchenDisplay() {
   useEffect(() => {
     if (!user) return
     const loadOrders = async () => {
-      const { data, error } = await supabase.from('orders').select('id, order_number, customer_name, customer_phone, order_type, delivery_address, delivery_reference, payment_status, receipt_type, receipt_document_number, status, total, notes, created_at, order_items(id, product_name, category, quantity, unit_price, notes)').in('status', ['nuevo', 'preparando', 'listo', 'en_camino']).or('payment_method.eq.cash,payment_status.eq.paid').order('created_at', { ascending: true })
+      const { data, error } = await supabase.from('orders').select('id, order_number, customer_name, customer_phone, order_type, delivery_address, delivery_reference, payment_status, receipt_type, receipt_document_number, receipt_legal_name, gift_card_amount, other_payment_amount, status, total, notes, created_at, order_items(id, product_name, category, quantity, unit_price, notes)').in('status', ['nuevo', 'preparando', 'listo', 'en_camino']).or('payment_method.eq.cash,payment_status.eq.paid').order('created_at', { ascending: true })
       if (error) { setMessage('No se pudieron cargar los pedidos. Revisa tu conexión e intenta nuevamente.'); return }
       setOrders((data ?? []) as KitchenOrder[])
     }
@@ -145,10 +145,10 @@ export function KitchenDisplay() {
     if (!token) { setMessage('Tu sesión venció. Ingresa nuevamente.'); setUpdatingId(null); return }
     try {
       const response = await fetch('/.netlify/functions/reject-kitchen-order', { method: 'POST', headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ orderId: rejectingOrder.id, reason: rejectionReason, comment: rejectionComment }) })
-      const result = await response.json() as { rejected?: boolean; emailSent?: boolean; message?: string }
+      const result = await response.json() as { rejected?: boolean; emailSent?: boolean; giftRestored?: boolean; culqiRefundRequired?: boolean; message?: string }
       if (!response.ok || !result.rejected) { setMessage(result.message ?? 'No fue posible rechazar el pedido.'); return }
       setOrders((current) => current.filter((order) => order.id !== rejectingOrder.id)); setRejectingOrder(null)
-      setMessage(result.emailSent ? 'Pedido rechazado y correo enviado al cliente.' : 'Pedido rechazado. No se pudo enviar el correo al cliente.')
+      setMessage(result.culqiRefundRequired ? 'Pedido rechazado y saldo Gift Card restaurado. IMPORTANTE: reembolsar manualmente el pago complementario de Culqi.' : result.emailSent ? 'Pedido rechazado y correo enviado al cliente.' : 'Pedido rechazado. No se pudo enviar el correo al cliente.')
     } catch { setMessage('No se pudo conectar con el servicio de rechazo.') } finally { setUpdatingId(null) }
   }
 
@@ -172,11 +172,11 @@ function KitchenOrderCard({ order, busy, enabled, onChangeStatus, onReject }: { 
   const action = order.status === 'nuevo' ? { label: 'Aceptar pedido', status: 'preparando' as const } : order.status === 'preparando' ? { label: 'Marcar listo', status: 'listo' as const } : order.order_type === 'delivery' ? { label: 'En camino', status: 'en_camino' as const } : { label: 'Entregar pedido', status: 'entregado' as const }
   const isDispatch = order.status === 'en_camino'
   const receiptLabel = order.receipt_type === 'factura'
-    ? `Factura · RUC ${order.receipt_document_number ?? 'no indicado'}`
+    ? `Factura · RUC ${order.receipt_document_number ?? 'no indicado'}${order.receipt_legal_name ? ` · ${order.receipt_legal_name}` : ''}`
     : order.receipt_document_number
       ? `Boleta · DNI ${order.receipt_document_number}`
       : 'Boleta · Sin DNI'
-  return <article className="kitchen-order-card"><div className="kitchen-order-heading"><strong>Pedido #{order.order_number}</strong><time>{formatTime(order.created_at)}</time></div>{order.receipt_type && <span className="kitchen-receipt-badge">{receiptLabel}</span>}<p className="kitchen-order-type">{order.order_type === 'delivery' ? 'Delivery' : 'Pick up'} · {order.payment_status === 'paid' ? 'Pagado' : 'Pago pendiente'}</p><p><b>{order.customer_name}</b><br />{order.customer_phone}</p>{order.order_type === 'delivery' && <p className="kitchen-address">{order.delivery_address}{order.delivery_reference ? ` · ${order.delivery_reference}` : ''}</p>}<ul className="kitchen-items">{order.order_items.map((item) => <li key={item.id}><span>{item.quantity} × {item.product_name}</span>{item.notes && <small>Nota: {item.notes}</small>}</li>)}</ul>{order.notes && <p className="kitchen-general-note">{order.notes}</p>}{enabled && <div className="kitchen-card-actions"><button className="primary-button" disabled={busy} onClick={() => onChangeStatus(order, isDispatch ? 'entregado' : action.status)}>{busy ? 'Actualizando...' : isDispatch ? 'Entregado' : action.label}</button>{order.status === 'nuevo' && <button className="staff-danger kitchen-reject-button" type="button" disabled={busy} onClick={() => onReject(order)}>Rechazar pedido</button>}</div>}</article>
+  return <article className="kitchen-order-card"><div className="kitchen-order-heading"><strong>Pedido #{order.order_number}</strong><time>{formatTime(order.created_at)}</time></div>{order.receipt_type && <span className="kitchen-receipt-badge">{receiptLabel}</span>}{Number(order.gift_card_amount) > 0 && <p>Gift Card S/ {Number(order.gift_card_amount).toFixed(2)} · Otro medio S/ {Number(order.other_payment_amount).toFixed(2)} · Comprobante por S/ {Number(order.total).toFixed(2)}</p>}<p className="kitchen-order-type">{order.order_type === 'delivery' ? 'Delivery' : 'Pick up'} · {order.payment_status === 'paid' ? 'Pagado' : 'Pago pendiente'}</p><p><b>{order.customer_name}</b><br />{order.customer_phone}</p>{order.order_type === 'delivery' && <p className="kitchen-address">{order.delivery_address}{order.delivery_reference ? ` · ${order.delivery_reference}` : ''}</p>}<ul className="kitchen-items">{order.order_items.map((item) => <li key={item.id}><span>{item.quantity} × {item.product_name}</span>{item.notes && <small>Nota: {item.notes}</small>}</li>)}</ul>{order.notes && <p className="kitchen-general-note">{order.notes}</p>}{enabled && <div className="kitchen-card-actions"><button className="primary-button" disabled={busy} onClick={() => onChangeStatus(order, isDispatch ? 'entregado' : action.status)}>{busy ? 'Actualizando...' : isDispatch ? 'Entregado' : action.label}</button>{order.status === 'nuevo' && <button className="staff-danger kitchen-reject-button" type="button" disabled={busy} onClick={() => onReject(order)}>Rechazar pedido</button>}</div>}</article>
 }
 
 declare global { interface Window { webkitAudioContext?: typeof AudioContext } }

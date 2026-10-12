@@ -1,5 +1,7 @@
 import { sendOrderRejectionEmail } from '../lib/notifications'
 import { json } from '../lib/request'
+import { getOrderGiftPayment, rejectGiftOrder } from '../lib/gift-cards'
+import { getOrder, saveOrder } from '../lib/orders'
 
 const kitchenEmail = 'kitchen@theblackcatrockbar.com'
 const reasons = new Set(['Stock agotado', 'Producto no disponible', 'Cocina cerrada por horario', 'Problema técnico', 'Otro'])
@@ -47,6 +49,18 @@ export default async (request: Request): Promise<Response> => {
     const orders: unknown = await orderResponse.json().catch(() => null)
     const order = Array.isArray(orders) && orders[0] && typeof orders[0] === 'object' ? orders[0] as DatabaseOrder : null
     if (!order || order.status !== 'nuevo') return json(409, { message: 'El pedido ya no está disponible para rechazo.' })
+
+    const giftPayment = await getOrderGiftPayment(orderId)
+    if (giftPayment) {
+      const rejection = await rejectGiftOrder(orderId, reason, comment, userEmail, userId)
+      const stored = await getOrder(order.order_number)
+      if (stored) {
+        try { await saveOrder({ ...stored, paymentStatus: rejection.culqi_refund_required ? 'refund_pending' : giftPayment.status === 'applied' ? 'refunded' : 'failed' }) }
+        catch (error) { console.error('Rejected Gift Card order blob sync failed:', error instanceof Error ? error.message : 'Unknown error') }
+      }
+      const emailSent = order.customer_email ? await sendOrderRejectionEmail({ orderId: order.order_number, customer: order.customer_name, email: order.customer_email, reason, comment }) === 'sent' : false
+      return json(200, { rejected: true, emailSent, giftRestored: rejection.gift_restored, culqiRefundRequired: rejection.culqi_refund_required })
+    }
 
     const updateResponse = await fetch(`${url}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}&status=eq.nuevo`, { method: 'PATCH', headers: headers(serviceKey, { Prefer: 'return=representation' }), body: JSON.stringify({ status: 'rechazado', rejection_reason: reason, rejection_comment: comment || null, rejected_by: userEmail }) })
     const updated: unknown = await updateResponse.json().catch(() => null)

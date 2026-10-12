@@ -1,0 +1,29 @@
+.gift-identifier {
+  margin: 22px 0;
+  padding: 18px;
+  border: 1px solid #725b35;
+  border-radius: 8px;
+  background: #17130f;
+}
+
+.gift-identifier h3 {
+  margin: 0 0 12px;
+  color: #f2c777;
+  font-size: 1.1rem;
+}
+
+.gift-identifier p {
+  line-height: 1.5;
+}
+
+.gift-identifier .gift-payment-code {
+  display: block;
+  font-family: monospace;
+  font-size: 1.15rem;
+  letter-spacing: .04em;
+  overflow-wrap: anywhere;
+}
+
+.gift-identifier .gift-qr {
+  margin: 16px auto;
+}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import QRCode from 'qrcode'
 import { supabase } from '../lib/supabase'
@@ -24,11 +24,13 @@ type GiftCard = {
   created_at: string
   activated_at: string | null
   expires_at: string | null
+  purchase_channel?: 'online' | 'in_store'
+  payment_method?: string
 }
 
 type GiftTransaction = {
   id: string
-  movement_type: 'creation' | 'redemption' | 'block' | 'unblock'
+  movement_type: 'creation' | 'redemption' | 'block' | 'unblock' | 'refund'
   amount: number
   balance_before: number
   balance_after: number
@@ -38,7 +40,7 @@ type GiftTransaction = {
 
 type RedemptionResult = { debited: number; remaining_to_pay: number; balance: number; idempotent: boolean }
 
-const cardFields = 'id, code, qr_token, initial_balance, current_balance, status, purchaser_name, recipient_name, recipient_email, recipient_phone, gift_message, transferable, created_at, activated_at, expires_at'
+const cardFields = 'id, code, qr_token, initial_balance, current_balance, status, purchaser_name, recipient_name, recipient_email, recipient_phone, gift_message, transferable, created_at, activated_at, expires_at, purchase_channel, payment_method'
 const money = (amount: number) => `S/ ${Number(amount).toFixed(2)}`
 const date = (value: string | null) => value ? new Intl.DateTimeFormat('es-PE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—'
 const statusOf = effectiveGiftCardStatus
@@ -83,11 +85,10 @@ export function GiftCardsPanel({ profile }: { profile: StaffProfile }) {
   const [giftMessage, setGiftMessage] = useState('')
   const [transferable, setTransferable] = useState(true)
   const [consumptionAmount, setConsumptionAmount] = useState('')
+  const [saleReference, setSaleReference] = useState('')
   const [verifiedRecipient, setVerifiedRecipient] = useState('')
   const [redemption, setRedemption] = useState<RedemptionResult | null>(null)
   const [openSections, setOpenSections] = useState(initialSections)
-  // Keep the same reference if a network error makes the result uncertain.
-  const redemptionReference = useRef(crypto.randomUUID())
 
   const loadCards = async () => {
     setLoading(true)
@@ -109,7 +110,7 @@ export function GiftCardsPanel({ profile }: { profile: StaffProfile }) {
   useEffect(() => {
     if (!selected) { setQrUrl(''); setTransactions([]); return }
     let current = true
-    const target = `${window.location.origin}/staff#gift-card=${selected.qr_token}`
+    const target = `${window.location.origin}/gift/${selected.qr_token}`
     void QRCode.toDataURL(target, { width: 232, margin: 2, errorCorrectionLevel: 'M' }).then((url) => { if (current) setQrUrl(url) }).catch(() => { if (current) setQrUrl('') })
     void supabase.from('gift_card_transactions').select('id, movement_type, amount, balance_before, balance_after, reference, created_at').eq('gift_card_id', selected.id).order('created_at', { ascending: false }).then(({ data }) => { if (current) setTransactions((data ?? []) as GiftTransaction[]) })
     return () => { current = false }
@@ -142,7 +143,7 @@ export function GiftCardsPanel({ profile }: { profile: StaffProfile }) {
     if (!query) return
     setMessage('')
     setRedemption(null)
-    const token = query.includes('#gift-card=') ? query.split('#gift-card=')[1] : null
+    const token = query.match(/\/gift\/([a-f0-9]{64})/i)?.[1] ?? (query.includes('#gift-card=') ? query.split('#gift-card=')[1] : null)
     if (token || /^BC-GC-/i.test(query)) {
       const result = await supabase.from('gift_cards').select(cardFields).eq(token ? 'qr_token' : 'code', token ?? query.toUpperCase()).maybeSingle()
       if (result.error || !result.data) { setSearchResults([]); setMessage('No se encontró una Gift Card con ese código o QR.') }
@@ -184,18 +185,18 @@ export function GiftCardsPanel({ profile }: { profile: StaffProfile }) {
     event.preventDefault()
     if (!selected || busy || statusOf(selected) !== 'active') return
     const amount = Number(consumptionAmount)
-    if (!Number.isFinite(amount) || amount <= 0 || !Number.isInteger(amount * 100)) { setMessage('Ingresa un monto válido en soles con hasta dos decimales.'); return }
+    if (!Number.isFinite(amount) || amount <= 0 || !Number.isInteger(amount * 100) || !saleReference.trim()) { setMessage('Ingresa un monto válido y la referencia de la venta registrada en Caja.'); return }
     if (!selected.transferable && verifiedRecipient.trim().toLocaleLowerCase('es-PE') !== selected.recipient_name?.trim().toLocaleLowerCase('es-PE')) { setMessage('Confirma el nombre del beneficiario antes de canjear.'); return }
     const debit = Math.min(amount, Number(selected.current_balance))
     const rest = amount - debit
     if (!window.confirm(`¿Canjear ${money(debit)} de ${selected.code}? ${rest > 0 ? `El cliente debe pagar ${money(rest)} por otro medio.` : ''}`)) return
     setBusy(true); setMessage(''); setRedemption(null)
     const { data, error } = await supabase.rpc('redeem_gift_card', {
-      p_card_id: selected.id, p_consumption_amount: amount, p_reference: redemptionReference.current,
+      p_card_id: selected.id, p_consumption_amount: amount, p_reference: saleReference.trim(),
       p_recipient_name: selected.transferable ? null : verifiedRecipient.trim(),
     })
     if (error || !data) setMessage(`No se pudo canjear: ${error?.message ?? 'Error desconocido'}`)
-    else { const result = data as RedemptionResult; redemptionReference.current = crypto.randomUUID(); setRedemption(result); setMessage(result.idempotent ? 'Canje ya registrado; no se descontó nuevamente.' : 'Canje registrado.'); setConsumptionAmount(''); await refreshSelected(selected.id) }
+    else { const result = data as RedemptionResult; setRedemption(result); setMessage(result.idempotent ? 'Canje ya registrado; no se descontó nuevamente.' : 'Canje registrado.'); setConsumptionAmount(''); setSaleReference(''); await refreshSelected(selected.id) }
     setBusy(false)
   }
 
@@ -264,10 +265,10 @@ export function GiftCardsPanel({ profile }: { profile: StaffProfile }) {
           <button type="button" className={`gift-card-compact${selected?.id === card.id ? ' selected' : ''}`} aria-expanded={selected?.id === card.id} onClick={() => { setSelected((current) => current?.id === card.id ? null : card); setRedemption(null) }}><strong>{card.code}</strong><span>{card.recipient_name || card.purchaser_name}</span><span>Saldo: {money(card.current_balance)}</span><span className="gift-card-status">{statusLabel[statusOf(card)]}</span><small>Vence: {date(card.expires_at)}</small><span className="gift-card-chevron" aria-hidden="true">{selected?.id === card.id ? '−' : '+'}</span></button>
           {selected?.id === card.id && <div className="gift-card-detail"><div className="staff-section-title"><div><h3>{selected.code}</h3><p>{statusLabel[statusOf(selected)]} · Saldo {money(selected.current_balance)} de {money(selected.initial_balance)}</p></div>{canManage && statusOf(selected) === 'active' && <button type="button" className="staff-danger" disabled={busy} onClick={() => void blockCard()}>Bloquear Gift Card</button>}{canManage && selected.status === 'blocked' && <button type="button" className="staff-primary" disabled={busy || !canUnblockGiftCard(profile.role, selected)} onClick={() => void unblockCard()}>Desbloquear Gift Card</button>}</div>
       {selected.status === 'blocked' && (Number(selected.current_balance) <= 0 || !selected.expires_at || new Date(selected.expires_at).getTime() <= Date.now()) && <p className="staff-warning">No se puede desbloquear: la Gift Card no tiene saldo o ya venció.</p>}
-      <div className="gift-card-detail-grid"><div><p>Comprador: <strong>{selected.purchaser_name}</strong></p><p>Beneficiario: <strong>{selected.recipient_name || 'No indicado'}</strong></p><p>{selected.transferable ? 'Transferible' : 'No transferible: verificar beneficiario al canjear'}</p><p>Activación: {date(selected.activated_at)}<br />Vencimiento: {date(selected.expires_at)}</p>{selected.gift_message && <p>Mensaje: {selected.gift_message}</p>}{selected.recipient_email && <p>Email: {selected.recipient_email}</p>}{selected.recipient_phone && <p>Teléfono: {selected.recipient_phone}</p>}</div><div className="gift-card-qr">{qrUrl ? <img src={qrUrl} alt={`QR de Gift Card ${selected.code}`} /> : <p>No se pudo generar el QR.</p>}<small>El QR no contiene el saldo. Solo el staff autenticado puede consultarlo.</small><button type="button" className="staff-secondary" disabled title="El reenvío por email y WhatsApp estará disponible en una fase posterior">Reenviar próximamente</button></div></div>
-      {statusOf(selected) === 'active' && <form className="staff-form gift-card-redeem" onSubmit={redeemCard}><h3>Canjear</h3><label>Monto total del consumo (S/)<input type="number" min="0.01" step="0.01" value={consumptionAmount} onChange={(event) => setConsumptionAmount(event.target.value)} required /></label>{!selected.transferable && <label>Nombre del beneficiario verificado<input value={verifiedRecipient} onChange={(event) => setVerifiedRecipient(event.target.value)} required /></label>}<p>Se usará hasta {money(Math.min(Number(consumptionAmount) || 0, Number(selected.current_balance)))} de la Gift Card. Excedente a pagar por otro medio: {money(Math.max((Number(consumptionAmount) || 0) - Number(selected.current_balance), 0))}.</p><button className="staff-primary" disabled={busy}>{busy ? 'Registrando…' : 'Confirmar canje'}</button></form>}
+      <div className="gift-card-detail-grid"><div><p>Comprador: <strong>{selected.purchaser_name}</strong></p><p>Beneficiario: <strong>{selected.recipient_name || 'No indicado'}</strong></p><p>Origen: {selected.purchase_channel === 'online' ? 'Online' : 'En local'} · Pago: {selected.payment_method === 'culqi' ? 'Culqi' : 'Efectivo'}</p><p>{selected.transferable ? 'Transferible' : 'No transferible: verificar beneficiario al canjear'}</p><p>Activación: {date(selected.activated_at)}<br />Vencimiento: {date(selected.expires_at)}</p>{selected.gift_message && <p>Mensaje: {selected.gift_message}</p>}{selected.recipient_email && <p>Email: {selected.recipient_email}</p>}{selected.recipient_phone && <p>Teléfono: {selected.recipient_phone}</p>}</div><div className="gift-card-qr">{qrUrl ? <img src={qrUrl} alt={`QR de Gift Card ${selected.code}`} /> : <p>No se pudo generar el QR.</p>}<small>El QR solo contiene el enlace público. El saldo se consulta en el servidor.</small><a href={`/gift/${selected.qr_token}`} target="_blank" rel="noreferrer">Ver Gift Card digital</a><button type="button" className="staff-secondary" disabled title="El reenvío por email y WhatsApp estará disponible en una fase posterior">Reenviar próximamente</button></div></div>
+      {statusOf(selected) === 'active' && <form className="staff-form gift-card-redeem" onSubmit={redeemCard}><h3>Canjear</h3><p>Primero registra el consumo completo en Caja y solicita boleta o factura por esa venta. Luego ingresa su referencia aquí; la compra de la Gift Card no generó comprobante por productos.</p><label>Monto total del consumo (S/)<input type="number" min="0.01" step="0.01" value={consumptionAmount} onChange={(event) => setConsumptionAmount(event.target.value)} required /></label><label>Referencia de venta de Caja<input value={saleReference} onChange={(event) => setSaleReference(event.target.value)} maxLength={120} placeholder="Número de venta, boleta o factura" required /></label>{!selected.transferable && <label>Nombre del beneficiario verificado<input value={verifiedRecipient} onChange={(event) => setVerifiedRecipient(event.target.value)} required /></label>}<p>Se usará hasta {money(Math.min(Number(consumptionAmount) || 0, Number(selected.current_balance)))} de la Gift Card. Excedente a pagar por otro medio: {money(Math.max((Number(consumptionAmount) || 0) - Number(selected.current_balance), 0))}.</p><button className="staff-primary" disabled={busy}>{busy ? 'Registrando…' : 'Confirmar canje'}</button></form>}
       {redemption && <p className="gift-card-result" role="status">Aplicado: {money(redemption.debited)} · Nuevo saldo: {money(redemption.balance)} · A cobrar por otro medio: {money(redemption.remaining_to_pay)}</p>}
-      <h3>Historial</h3><ul className="gift-card-history">{transactions.map((item) => <li key={item.id}><strong>{item.movement_type === 'creation' ? 'Creación' : item.movement_type === 'redemption' ? 'Canje' : item.movement_type === 'block' ? 'Bloqueo' : 'Desbloqueo'}</strong><span>{date(item.created_at)}</span><span>{money(item.balance_before)} → {money(item.balance_after)}</span>{item.reference && <small>Referencia: {item.reference}</small>}</li>)}</ul>
+      <h3>Historial</h3><ul className="gift-card-history">{transactions.map((item) => <li key={item.id}><strong>{item.movement_type === 'creation' ? 'Creación' : item.movement_type === 'redemption' ? 'Canje' : item.movement_type === 'block' ? 'Bloqueo' : item.movement_type === 'refund' ? 'Restitución' : 'Desbloqueo'}</strong><span>{date(item.created_at)}</span><span>{money(item.balance_before)} → {money(item.balance_after)}</span>{item.reference && <small>Referencia: {item.reference}</small>}</li>)}</ul>
           </div>}
         </div>)}</div>}
       </section>

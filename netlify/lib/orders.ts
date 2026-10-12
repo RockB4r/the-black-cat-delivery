@@ -3,8 +3,8 @@ import menuData from '../../src/data/menu.json'
 import type { MenuCategory } from '../../src/data/types'
 import { syncKitchenPaymentStatus } from './kitchen'
 
-export type PaymentMethod = 'cash' | 'card' | 'wallet'
-export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'expired'
+export type PaymentMethod = 'cash' | 'card' | 'wallet' | 'gift_card' | 'gift_card_culqi'
+export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'expired' | 'refunded' | 'refund_pending'
 export type NotificationStatus = 'pending' | 'sent' | 'failed'
 export type ReceiptType = 'boleta' | 'factura'
 
@@ -22,6 +22,7 @@ export type StoreOrder = {
   receiptType: ReceiptType
   dni?: string
   ruc?: string
+  receiptLegalName?: string
   items: OrderItem[]
   notes: string[]
   subtotal: number
@@ -29,6 +30,9 @@ export type StoreOrder = {
   discountPercent?: number
   discountAmount: number
   total: number
+  giftCardAmount?: number
+  otherPaymentAmount?: number
+  otherPaymentMethod?: string
   paymentMethod: PaymentMethod
   paymentStatus: PaymentStatus
   culqiChargeId?: string
@@ -53,13 +57,14 @@ export const trustedItems = (items: unknown): { items: OrderItem[]; total: numbe
   for (const item of items) {
     if (typeof item !== 'object' || item === null) return null
     const { name, quantity, note, style, sauce } = item as Record<string, unknown>
-    const product = typeof name === 'string' ? catalog.get(name) : undefined
+    const productName = typeof name === 'string' ? name : ''
+    const product = catalog.get(productName)
     if (!product || typeof quantity !== 'number' || !Number.isSafeInteger(quantity) || quantity <= 0 || (note !== undefined && typeof note !== 'string') || (style !== undefined && typeof style !== 'string') || (sauce !== undefined && typeof sauce !== 'string')) return null
     const selectedStyle = typeof style === 'string' ? product.styles?.find((candidate) => candidate.name === style) : undefined
     const selectedSauce = typeof sauce === 'string' ? product.sauces?.find((candidate) => candidate.name === sauce) : undefined
     if ((product.styles && !selectedStyle) || (!product.styles && style !== undefined) || (product.sauces && !selectedSauce) || (!product.sauces && sauce !== undefined)) return null
     const price = selectedStyle?.price ?? product.price
-    validated.push({ name, price, quantity, style: selectedStyle?.name, sauce: selectedSauce?.name, note: typeof note === 'string' && note.trim() ? note.trim().slice(0, 150) : undefined })
+    validated.push({ name: productName, price, quantity, style: selectedStyle?.name, sauce: selectedSauce?.name, note: typeof note === 'string' && note.trim() ? note.trim().slice(0, 150) : undefined })
     total += price * quantity
   }
   return Number.isSafeInteger(total * 100) && total > 0 ? { items: validated, total } : null
@@ -80,6 +85,7 @@ const kitchenOrderPayload = (order: StoreOrder) => ({
   payment_status: order.paymentStatus,
   receipt_type: order.receiptType,
   receipt_document_number: order.receiptType === 'factura' ? order.ruc ?? '' : order.dni ?? '',
+  receipt_legal_name: order.receiptLegalName ?? '',
   subtotal: order.subtotal,
   delivery_fee: 0,
   total: order.total,
@@ -159,4 +165,17 @@ export const linkCulqiOrder = async (culqiOrderId: string, orderId: string) => {
   await getStore({ name: 'the-black-cat-culqi-order-links', consistency: 'strong' }).set(culqiOrderId, orderId, { onlyIfNew: true })
 }
 
-export const getOrderIdByCulqiOrder = async (culqiOrderId: string) => getStore({ name: 'the-black-cat-culqi-order-links', consistency: 'strong' }).get(culqiOrderId, { consistency: 'strong' })
+export const getOrderIdByCulqiOrder = async (culqiOrderId: string): Promise<string | null> => {
+  const value = await getStore({ name: 'the-black-cat-culqi-order-links', consistency: 'strong' }).get(culqiOrderId, { consistency: 'strong' })
+  if (typeof value === 'string') return value
+  const url = process.env.SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) return null
+  const response = await fetch(`${url}/rest/v1/orders?culqi_order_id=eq.${encodeURIComponent(culqiOrderId)}&select=order_number&limit=1`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+  })
+  if (!response.ok) throw new Error('Could not reconcile Culqi order link')
+  const rows: unknown = await response.json()
+  const row = Array.isArray(rows) ? rows[0] : null
+  return row && typeof row === 'object' && 'order_number' in row && typeof row.order_number === 'string' ? row.order_number : null
+}
