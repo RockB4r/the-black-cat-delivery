@@ -1,15 +1,17 @@
 import { finalizeGiftPurchase, getGiftPurchaseByAccess } from '../lib/gift-cards'
 import { json } from '../lib/request'
-import { culqiGiftCardOrderNumber, confirmedCulqiCharge, confirmedCulqiOrder, expiredCulqiOrder } from '../lib/culqi-verification'
+import { culqiGiftCardOrderNumber, confirmedCulqiCharge, confirmedCulqiOrder, expiredCulqiOrder, getCulqiEnvironment, validateCulqiReferences } from '../lib/culqi-verification'
 
 export default async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') return json(405, { message: 'Método no permitido.' })
+  if (!getCulqiEnvironment()) return new Response(null, { status: 503 })
   const body: unknown = await request.json().catch(() => null)
   const accessToken = body && typeof body === 'object' && 'accessToken' in body && typeof body.accessToken === 'string' ? body.accessToken : ''
   if (!/^[a-f0-9]{64}$/.test(accessToken)) return json(400, { message: 'Consulta inválida.' })
   try {
     const purchase = await getGiftPurchaseByAccess(accessToken)
     if (!purchase) return json(404, { message: 'Compra no encontrada.' })
+    if (!validateCulqiReferences(purchase.culqi_order_id, purchase.culqi_charge_id)) return json(409, { message: 'La compra no pertenece al entorno de pago configurado.' })
     if (purchase.payment_status === 'paid') return json(200, { status: 'paid', receipt: await finalizeGiftPurchase(purchase, purchase.culqi_charge_id) })
     if (purchase.payment_status === 'expired') return json(200, { status: 'expired' })
     const secretKey = process.env.CULQI_SECRET_KEY
@@ -22,7 +24,7 @@ export default async (request: Request): Promise<Response> => {
     if (!response.ok || !result || typeof result !== 'object') return json(200, { status: 'pending' })
     const amountInCents = Math.round(Number(purchase.amount) * 100)
     const chargeApproved = chargeId && confirmedCulqiCharge(result, { id: chargeId, amountInCents,
-      description: `Gift Card ${purchase.checkout_id}`, checkoutId: purchase.checkout_id, allowMissingStatus: true })
+      description: `Gift Card ${purchase.checkout_id}`, checkoutId: purchase.checkout_id })
     const orderExpected = purchase.culqi_order_id ? { id: purchase.culqi_order_id, orderNumber: culqiGiftCardOrderNumber(purchase.checkout_id), amountInCents } : null
     const orderApproved = orderExpected && confirmedCulqiOrder(result, orderExpected)
     if (orderApproved || chargeApproved) {

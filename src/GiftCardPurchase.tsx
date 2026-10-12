@@ -1,4 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react'
+import { ensureCulqiEnvironment } from './lib/culqiEnvironment'
 import { checkoutForGiftPurchase, giftCheckoutStorageKey, newGiftCheckout, restoreGiftCheckout, type GiftPurchaseForm } from './giftCardCheckout'
 import './GiftCardsPublic.css'
 
@@ -67,6 +68,7 @@ export function GiftCardPurchase() {
     saveSession(giftCheckoutStorageKey, JSON.stringify(nextCheckout))
     setBusy(true); setStatus('Preparando compra segura…')
     try {
+      await ensureCulqiEnvironment(import.meta.env.VITE_CULQI_PUBLIC_KEY)
       const response = await fetch('/.netlify/functions/gift-card-purchase', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ checkoutId: nextCheckout.checkoutId, ...form }) })
       const prepared = await response.json() as Partial<Prepared> & { message?: string }
       if (!response.ok || !prepared.accessToken || !prepared.amountInCents) { setStatus(prepared.message ?? 'No se pudo preparar la compra.'); return }

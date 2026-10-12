@@ -1,5 +1,5 @@
 import { getStore } from '@netlify/blobs'
-import { confirmedCulqiCharge, confirmedCulqiOrder, expiredCulqiOrder } from './culqi-verification.ts'
+import { confirmedCulqiCharge, confirmedCulqiOrder, expiredCulqiOrder, getCulqiEnvironment, validateCulqiChargeId, validateCulqiOrderId } from './culqi-verification.ts'
 
 export type GiftDelivery = 'email' | 'whatsapp' | 'personal'
 export type GiftPurchaseInput = {
@@ -144,6 +144,7 @@ export const createGiftPurchase = async (input: GiftPurchaseInput) => {
 }
 
 export const attachGiftCulqiOrder = async (checkoutId: string, culqiOrderId: string) => {
+  if (!validateCulqiOrderId(culqiOrderId)) throw new Error('Culqi order environment mismatch')
   const rows = await database<GiftPurchase[]>(`gift_card_purchases?checkout_id=eq.${encodeURIComponent(checkoutId)}&culqi_order_id=is.null&payment_status=eq.pending&select=*`, {
     method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ culqi_order_id: culqiOrderId }),
   })
@@ -151,7 +152,17 @@ export const attachGiftCulqiOrder = async (checkoutId: string, culqiOrderId: str
   return rows[0]
 }
 
+export const assertCulqiChargeOwnership = async (chargeId: string, checkoutId: string) => {
+  if (!validateCulqiChargeId(chargeId)) throw new Error('Culqi charge environment mismatch')
+  for (const table of ['orders', 'gift_card_purchases', 'gift_card_culqi_attempts']) {
+    const owners = await database<Array<{ checkout_id: string | null }>>(`${table}?culqi_charge_id=eq.${encodeURIComponent(chargeId)}&select=checkout_id`)
+    if (owners.some((owner) => owner.checkout_id !== checkoutId)) throw new Error('Culqi charge already belongs to another checkout')
+  }
+}
+
 export const recordGiftCharge = async (checkoutId: string, chargeId: string) => {
+  if (!validateCulqiChargeId(chargeId)) throw new Error('Culqi charge environment mismatch')
+  await assertCulqiChargeOwnership(chargeId, checkoutId)
   const rows = await database<GiftPurchase[]>(`gift_card_purchases?checkout_id=eq.${encodeURIComponent(checkoutId)}&culqi_charge_id=is.null&payment_status=eq.pending&select=*`, {
     method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ culqi_charge_id: chargeId }),
   })
@@ -159,6 +170,7 @@ export const recordGiftCharge = async (checkoutId: string, chargeId: string) => 
 }
 
 export const finalizeGiftPurchase = async (purchase: GiftPurchase, chargeId: string | null = null) => {
+  if (!getCulqiEnvironment() || (purchase.culqi_order_id && !validateCulqiOrderId(purchase.culqi_order_id)) || (chargeId && !validateCulqiChargeId(chargeId))) throw new Error('Culqi purchase environment mismatch')
   const receipt = await database<GiftReceipt>('rpc/finalize_gift_card_purchase', {
     method: 'POST', body: JSON.stringify({ p_checkout_id: purchase.checkout_id, p_culqi_order_id: purchase.culqi_order_id, p_culqi_charge_id: chargeId }),
   })
@@ -192,13 +204,17 @@ export const reconcileExpiredGiftReservations = async (cardId: string) => {
       continue
     }
     const key = process.env.CULQI_SECRET_KEY
-    if (!key) throw new Error('Culqi reconciliation key is unavailable')
+    if (!getCulqiEnvironment(key)) throw new Error('Culqi reconciliation key is unavailable')
+    if ((order.culqi_charge_id && !validateCulqiChargeId(order.culqi_charge_id)) || (order.culqi_order_id && !validateCulqiOrderId(order.culqi_order_id))) {
+      await setGiftPaymentState(payment.order_id, 'reconciliation_required')
+      continue
+    }
     if (order.culqi_charge_id) {
       const chargeResponse = await fetch(`https://api.culqi.com/v2/charges/${encodeURIComponent(order.culqi_charge_id)}`, { headers: { Authorization: `Bearer ${key}` } })
       const charge: unknown = await chargeResponse.json().catch(() => null)
       if (!chargeResponse.ok) throw new Error('Culqi charge reconciliation is unavailable')
       if (confirmedCulqiCharge(charge, { id: order.culqi_charge_id, amountInCents: Math.round(Number(payment.other_amount) * 100),
-        description: `Pedido ${order.order_number}`, checkoutId: payment.checkout_id, allowMissingStatus: true })) {
+        description: `Pedido ${order.order_number}`, checkoutId: payment.checkout_id })) {
         await setGiftPaymentState(payment.order_id, 'paid')
         await applyGiftToOrder(payment.order_id, order.culqi_charge_id)
         const stored = await getOrder(order.order_number)
@@ -261,9 +277,17 @@ export const beginMixedCulqiAttempt = (orderId: string, checkoutId: string, culq
 export const markMixedCulqiAttempt = (attemptId: string, status: 'rejected' | 'reconciliation_required', source: string) => database<boolean>('rpc/mark_mixed_culqi_attempt', {
   method: 'POST', body: JSON.stringify({ p_attempt_id: attemptId, p_status: status, p_source: source }),
 })
-export const completeMixedCulqiAttempt = (orderId: string, attemptId: string, culqiReference: string, chargeId: string | null, source: string, actor: string | null = null, note: string | null = null) => database<{ gift_amount?: number; other_amount?: number; idempotent: boolean }>('rpc/complete_mixed_culqi_attempt', {
-  method: 'POST', body: JSON.stringify({ p_order_id: orderId, p_attempt_id: attemptId, p_culqi_reference: culqiReference, p_charge_id: chargeId, p_source: source, p_actor: actor, p_note: note }),
-})
+export const completeMixedCulqiAttempt = async (orderId: string, attemptId: string, culqiReference: string, chargeId: string | null, source: string, actor: string | null = null, note: string | null = null) => {
+  if (chargeId ? !validateCulqiChargeId(chargeId) || culqiReference !== chargeId : !validateCulqiOrderId(culqiReference)) throw new Error('Culqi attempt reference environment mismatch')
+  if (chargeId) {
+    const order = one(await database<Array<{ checkout_id: string }>>(`orders?id=eq.${encodeURIComponent(orderId)}&select=checkout_id`))
+    if (!order?.checkout_id) throw new Error('Culqi attempt checkout is unavailable')
+    await assertCulqiChargeOwnership(chargeId, order.checkout_id)
+  }
+  return database<{ gift_amount?: number; other_amount?: number; idempotent: boolean }>('rpc/complete_mixed_culqi_attempt', {
+    method: 'POST', body: JSON.stringify({ p_order_id: orderId, p_attempt_id: attemptId, p_culqi_reference: culqiReference, p_charge_id: chargeId, p_source: source, p_actor: actor, p_note: note }),
+  })
+}
 export const clearMixedCulqiAttempt = (orderId: string, attemptId: string, actor: string, note: string) => database<boolean>('rpc/clear_mixed_culqi_attempt', {
   method: 'POST', body: JSON.stringify({ p_order_id: orderId, p_attempt_id: attemptId, p_actor: actor, p_note: note }),
 })
@@ -278,6 +302,7 @@ export const setGiftPaymentState = async (orderId: string, state: OrderGiftPayme
   if (rows.length !== 1) throw new Error('Gift Card payment state could not be updated')
 }
 export const linkMixedCulqiOrder = async (orderId: string, culqiOrderId: string) => {
+  if (!validateCulqiOrderId(culqiOrderId)) throw new Error('Culqi order environment mismatch')
   const rows = await database<Array<{ id: string }>>(`orders?id=eq.${encodeURIComponent(orderId)}&culqi_order_id=is.null&payment_status=eq.pending&select=id`, {
     method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ culqi_order_id: culqiOrderId }),
   })

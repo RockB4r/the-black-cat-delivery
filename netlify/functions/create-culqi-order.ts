@@ -6,11 +6,12 @@ import { confirmPromotionUse, getReservedPromotion } from '../lib/promotions'
 import { applyGiftToOrder, getOrderGiftPayment, linkMixedCulqiOrder, reserveGiftForOrder } from '../lib/gift-cards'
 import { notifyOrder } from '../lib/notifications'
 import { getStore } from '@netlify/blobs'
-import { matchingCulqiOrder } from '../lib/culqi-verification'
+import { matchingCulqiOrder, getCulqiEnvironment, validateCulqiOrderId, validateCulqiReferences } from '../lib/culqi-verification'
 import { normalizeGiftPaymentCode } from '../../src/lib/giftPaymentCode'
 
 export default async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') return json(405, { message: 'Método no permitido.' })
+  if (!getCulqiEnvironment()) return new Response(null, { status: 503 })
   const kitchenAvailability = await getOnlineOrderingAvailability()
   if (!kitchenAvailability.isOpen) return json(403, { message: kitchenAvailability.message })
   const body: unknown = await request.json().catch(() => null)
@@ -36,6 +37,7 @@ export default async (request: Request): Promise<Response> => {
   if (input.promotionCode && !promotion) return json(400, { message: 'El código de descuento ya no es válido. Vuelve a aplicarlo.' })
   const order = await createOrder(input, 'pending', promotion ? { code: promotion.code, discountPercent: promotion.discountPercent, discountAmount: promotion.discountAmount } : undefined)
   if (!order.databaseOrderId) return json(503, { message: 'El pedido aún se está registrando. Inténtalo nuevamente.' })
+  if (!validateCulqiReferences(order.culqiOrderId, order.culqiChargeId)) return json(409, { message: 'El pedido no pertenece al entorno de pago configurado.' })
   let giftPayment = await getOrderGiftPayment(order.databaseOrderId)
   if (giftPaymentCode) {
     if (order.culqiOrderId && !giftPayment) return json(409, { message: 'Este pedido ya inició otro método de pago. Inicia un nuevo checkout.' })
@@ -54,7 +56,7 @@ export default async (request: Request): Promise<Response> => {
     try { await notifyOrder(paidOrder) } catch (error) { console.error('Gift Card order notification failed:', error instanceof Error ? error.message : 'Unknown error') }
     return json(200, { internalOrderId: order.databaseOrderId, orderId: order.orderId, paid: true, giftCardAmount: giftPayment.gift_amount, otherPaymentAmount: 0, amountInCents: 0 })
   }
-  if (!secretKey) return json(500, { message: 'El pago no está disponible temporalmente.' })
+  if (!getCulqiEnvironment(secretKey)) return json(500, { message: 'El pago no está disponible temporalmente.' })
   const amountInCents = Math.round((giftPayment?.other_amount ?? order.total) * 100)
   if (order.culqiOrderId) return json(200, { internalOrderId: order.databaseOrderId, orderId: order.orderId, culqiOrderId: order.culqiOrderId, paymentStatus: order.paymentStatus, amountInCents })
   const mixedLock = giftPayment ? getStore({ name: 'the-black-cat-gift-culqi-order-locks', consistency: 'strong' }) : null
@@ -80,7 +82,7 @@ export default async (request: Request): Promise<Response> => {
     })
     const culqiOrder: unknown = await response.json().catch(() => null)
     const returnedId = typeof culqiOrder === 'object' && culqiOrder !== null && 'id' in culqiOrder && typeof culqiOrder.id === 'string' ? culqiOrder.id : ''
-    if (!response.ok || !returnedId.startsWith('ord_') || !matchingCulqiOrder(culqiOrder, { id: returnedId, orderNumber: order.orderId, amountInCents })) {
+    if (!response.ok || !validateCulqiOrderId(returnedId) || !matchingCulqiOrder(culqiOrder, { id: returnedId, orderNumber: order.orderId, amountInCents })) {
       if (mixedLock && response.status >= 400 && response.status < 500) await mixedLock.delete(order.checkoutId)
       console.error('Culqi order creation failed:', response.status)
       return json(response.status, { message: 'Culqi rechazó la creación de la orden. Revisa los logs de la Function.' })

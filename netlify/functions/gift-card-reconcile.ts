@@ -1,6 +1,6 @@
 import { json } from '../lib/request'
-import { confirmedCulqiCharge, confirmedCulqiOrder, expiredCulqiOrder } from '../lib/culqi-verification'
-import { clearMixedCulqiAttempt, completeMixedCulqiAttempt, getMixedCulqiAttempts, getOrderGiftPayment } from '../lib/gift-cards'
+import { evaluateReconciledChargeResponse, confirmedCulqiOrder, expiredCulqiOrder, getCulqiEnvironment, validateCulqiChargeId, validateCulqiOrderId } from '../lib/culqi-verification'
+import { clearMixedCulqiAttempt, completeMixedCulqiAttempt, getMixedCulqiAttempts, getOrderGiftPayment, markMixedCulqiAttempt } from '../lib/gift-cards'
 import { getOrder, saveOrder } from '../lib/orders'
 
 type ResolutionInput = { orderId?: unknown; attemptId?: unknown; decision?: unknown; chargeId?: unknown; note?: unknown; confirmNoCharge?: unknown }
@@ -25,6 +25,7 @@ const adminIdentity = async (request: Request): Promise<string | null> => {
 
 export default async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') return json(405, { message: 'Método no permitido.' })
+  if (!getCulqiEnvironment()) return new Response(null, { status: 503 })
   const actor = await adminIdentity(request)
   if (!actor) return json(403, { message: 'Solo Admin o Manager puede conciliar un pago mixto.' })
   const body: unknown = await request.json().catch(() => null)
@@ -41,27 +42,32 @@ export default async (request: Request): Promise<Response> => {
   const url = process.env.SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
   const secretKey = process.env.CULQI_SECRET_KEY
-  if (!url || !key || !secretKey) return json(503, { message: 'La conciliación no está configurada.' })
+  if (!url || !key || !getCulqiEnvironment(secretKey)) return json(503, { message: 'La conciliación no está configurada.' })
   const orderResponse = await fetch(`${url}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}&select=order_number,culqi_order_id,culqi_charge_id,payment_status`, { headers: { apikey: key, Authorization: `Bearer ${key}` } })
   const rows: unknown = await orderResponse.json().catch(() => null)
   const row = Array.isArray(rows) ? rows[0] : null
   if (!orderResponse.ok || !row || typeof row.order_number !== 'string' || typeof row.culqi_order_id !== 'string' || row.culqi_order_id !== attempt.culqi_order_id) return json(409, { message: 'El pedido no coincide.' })
   const stored = await getOrder(row.order_number)
+  if (!validateCulqiOrderId(row.culqi_order_id)) return json(409, { message: 'La orden no pertenece al entorno Culqi configurado.' })
   if (!stored) return json(409, { message: 'El pedido no está disponible para conciliación.' })
 
   if (input.decision === 'paid') {
     const chargeId = typeof input.chargeId === 'string' ? input.chargeId.trim() : ''
-    if (!/^chr_test_[A-Za-z0-9]+$/.test(chargeId)) return json(400, { message: 'Se requiere el ID de un cargo Culqi TEST.' })
+    if (!validateCulqiChargeId(chargeId)) return json(400, { message: 'Se requiere un cargo del entorno Culqi configurado.' })
     const chargeResponse = await fetch(`https://api.culqi.com/v2/charges/${encodeURIComponent(chargeId)}`, { headers: { Authorization: `Bearer ${secretKey}` } })
     const charge: unknown = await chargeResponse.json().catch(() => null)
-    if (!chargeResponse.ok || !confirmedCulqiCharge(charge, { id: chargeId, amountInCents: Math.round(Number(payment.other_amount) * 100), description: `Pedido ${row.order_number}`, checkoutId: payment.checkout_id, allowMissingStatus: true })) return json(409, { message: 'No se pudo verificar que el cargo corresponda al pedido.' })
+    const evidence = evaluateReconciledChargeResponse(charge, { id: chargeId, amountInCents: Math.round(Number(payment.other_amount) * 100), description: `Pedido ${row.order_number}`, checkoutId: payment.checkout_id }, chargeResponse.status)
+    if (evidence !== 'approved') {
+      if (evidence === 'ambiguous' && attempt.status === 'processing') await markMixedCulqiAttempt(attemptId, 'reconciliation_required', 'manual_get_ambiguous')
+      return json(409, { message: 'El cargo no tiene evidencia suficiente de aprobación. La reserva se conserva.' })
+    }
     const result = await completeMixedCulqiAttempt(orderId, attemptId, chargeId, chargeId, 'manual_verified', actor, note)
     await saveOrder({ ...stored, paymentStatus: 'paid', paymentMethod: 'gift_card_culqi', culqiChargeId: chargeId, giftCardAmount: Number(payment.gift_amount), otherPaymentAmount: Number(payment.other_amount), otherPaymentMethod: 'culqi' })
     return json(200, { resolved: true, idempotent: result.idempotent, orderId: row.order_number })
   }
 
   if (input.decision === 'no_charge') {
-    if (input.confirmNoCharge !== true || row.culqi_charge_id) return json(400, { message: 'Confirma en Culqi TEST que no existe cargo aprobado.' })
+    if (input.confirmNoCharge !== true || row.culqi_charge_id) return json(400, { message: 'Confirma en Culqi que no existe cargo aprobado.' })
     const culqiResponse = await fetch(`https://api.culqi.com/v2/orders/${encodeURIComponent(row.culqi_order_id)}`, { headers: { Authorization: `Bearer ${secretKey}` } })
     const culqiOrder: unknown = await culqiResponse.json().catch(() => null)
     const expected = { id: row.culqi_order_id, orderNumber: row.order_number, amountInCents: Math.round(Number(payment.other_amount) * 100) }

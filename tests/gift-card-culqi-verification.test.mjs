@@ -1,8 +1,12 @@
-import test from 'node:test'
+import test, { after } from 'node:test'
 import assert from 'node:assert/strict'
-import { culqiGiftCardOrderNumber, confirmedCulqiCharge, confirmedCulqiOrder, expiredCulqiOrder, matchingCulqiOrder, sanitizeCulqiErrorBody } from '../netlify/lib/culqi-verification.ts'
+import { culqiGiftCardOrderNumber, confirmedCulqiCharge, confirmedCulqiOrder, expiredCulqiOrder, matchingCulqiOrder, sanitizeCulqiErrorBody, getCulqiEnvironment, validateCulqiChargeId, validateCulqiOrderId, evaluateOriginalChargeResponse, evaluateReconciledChargeResponse } from '../netlify/lib/culqi-verification.ts'
 
-const expected = { id: 'ord_live_test', orderNumber: 'TBC-TEST-001', amountInCents: 3000 }
+const previousSecret = process.env.CULQI_SECRET_KEY
+process.env.CULQI_SECRET_KEY = 'sk_test_SYNTHETIC'
+after(() => { if (previousSecret === undefined) delete process.env.CULQI_SECRET_KEY; else process.env.CULQI_SECRET_KEY = previousSecret })
+
+const expected = { id: 'ord_test_test', orderNumber: 'TBC-TEST-001', amountInCents: 3000 }
 const order = { id: expected.id, order_number: expected.orderNumber, amount: 3000, currency_code: 'PEN', state: 'paid' }
 
 test('UUID estándar genera un número Culqi determinista de máximo 36 caracteres', () => {
@@ -48,7 +52,7 @@ test('un pedido vencido no se confunde con uno pagado', () => {
 })
 
 test('cargo aprobado exige referencia, PEN, monto y descripción esperados', () => {
-  const charge = { id: 'chr_live_test', response_code: 'venta_exitosa', amount: 3000, currency: 'PEN', description: 'Pedido TBC-TEST-001' }
+  const charge = { id: 'chr_test_test', response_code: 'venta_exitosa', amount: 3000, currency: 'PEN', description: 'Pedido TBC-TEST-001' }
   const chargeExpected = { id: charge.id, amountInCents: 3000, description: charge.description }
   assert.equal(confirmedCulqiCharge(charge, chargeExpected), true)
   assert.equal(confirmedCulqiCharge({ ...charge, id: 'chr_otro' }, chargeExpected), false)
@@ -58,48 +62,44 @@ test('cargo aprobado exige referencia, PEN, monto y descripción esperados', () 
   assert.equal(confirmedCulqiCharge({ ...charge, description: 'Pedido ajeno' }, chargeExpected), false)
 })
 
-test('HTTP 201 permite estados ausentes solo en creación exitosa y nunca acepta un rechazo explícito', async () => {
-  const charge = { id: 'chr_test_1234567890123456', amount: 5000, currency: null, currency_code: 'PEN',
-    description: 'Gift Card 249e9e14-c3b7-4761-a62b-4588d417db8d', response_code: null, state: null }
-  const expectedCharge = { id: charge.id, amountInCents: 5000, description: charge.description,
-    checkoutId: '249e9e14-c3b7-4761-a62b-4588d417db8d' }
-  const created = Response.json(charge, { status: 201 })
-  assert.equal(confirmedCulqiCharge(await created.json(), { ...expectedCharge, allowMissingStatus: created.status === 201 }), true)
-  assert.equal(confirmedCulqiCharge(charge, expectedCharge), false)
-  assert.equal(confirmedCulqiCharge({ ...charge, response_code: 'venta_exitosa' }, expectedCharge), true)
-  const createdWithCode = Response.json({ ...charge, response_code: 'venta_exitosa' }, { status: 201 })
-  assert.equal(confirmedCulqiCharge(await createdWithCode.json(), expectedCharge), true)
-  const pending = Response.json(charge, { status: 202 })
-  assert.equal(confirmedCulqiCharge(await pending.json(), { ...expectedCharge, allowMissingStatus: pending.status === 201 }), false)
-  assert.equal(confirmedCulqiCharge({ ...charge, response_code: 'denegada' }, { ...expectedCharge, allowMissingStatus: true }), false)
-  assert.equal(confirmedCulqiCharge({ ...charge, state: 'Rechazada' }, { ...expectedCharge, allowMissingStatus: true }), false)
-  assert.equal(confirmedCulqiCharge({ ...charge, state: 'Autorizada' }, { ...expectedCharge, allowMissingStatus: true }), false)
-  assert.equal(confirmedCulqiCharge({ ...charge, state: 'Exitosa' }, { ...expectedCharge, allowMissingStatus: true }), true)
-  for (const status of [402, 400, 500]) {
-    const failed = Response.json(charge, { status })
-    assert.equal(confirmedCulqiCharge(await failed.json(), { ...expectedCharge, allowMissingStatus: failed.ok }), false)
+
+for (const environment of ['test', 'live']) {
+  test(`backend ${environment}: IDs, POST original y GET posterior no se confunden`, () => {
+    process.env.CULQI_SECRET_KEY = `sk_${environment}_SYNTHETIC`
+    try {
+      const opposite = environment === 'test' ? 'live' : 'test'
+      assert.equal(getCulqiEnvironment(), environment)
+      assert.equal(validateCulqiChargeId(`chr_${environment}_fixture`), true)
+      assert.equal(validateCulqiOrderId(`ord_${environment}_fixture`), true)
+      assert.equal(validateCulqiChargeId(`chr_${opposite}_fixture`), false)
+      assert.equal(validateCulqiOrderId(`ord_${opposite}_fixture`), false)
+      const expectedCharge = { id: `chr_${environment}_fixture`, amountInCents: 5000, description: 'Gift Card checkout', checkoutId: 'checkout' }
+      const charge = { id: expectedCharge.id, amount: 5000, currency_code: 'PEN', description: expectedCharge.description, response_code: null, state: null }
+      assert.equal(evaluateOriginalChargeResponse(charge, expectedCharge, 201), 'approved')
+      assert.equal(evaluateOriginalChargeResponse(charge, expectedCharge, 200), 'ambiguous')
+      assert.equal(evaluateReconciledChargeResponse(charge, expectedCharge, 200), 'ambiguous')
+      assert.equal(confirmedCulqiCharge(charge, expectedCharge), false)
+      for (const evaluator of [evaluateOriginalChargeResponse, evaluateReconciledChargeResponse]) {
+        assert.equal(evaluator({ ...charge, response_code: 'venta_exitosa' }, expectedCharge, 201), 'approved')
+        assert.equal(evaluator({ ...charge, state: 'Exitosa' }, expectedCharge, 200), 'approved')
+        assert.equal(evaluator({ ...charge, response_code: 'denegada' }, expectedCharge, 201), 'failed')
+        assert.equal(evaluator({ ...charge, state: 'Rechazada', response_code: 'venta_exitosa' }, expectedCharge, 201), 'failed')
+        for (const bad of [{ amount: 4999 }, { currency_code: 'USD' }, { currency: 'USD' }, { description: 'Otra compra' }, { id: `chr_${opposite}_fixture` }, { metadata: { checkout_id: 'other' } }]) {
+          assert.equal(evaluator({ ...charge, ...bad }, expectedCharge, 201), 'invalid')
+        }
+        assert.equal(evaluator({ ...charge, metadata: { checkout_id: 'checkout' } }, expectedCharge, 201), evaluator(charge, expectedCharge, 201))
+        for (const status of [400, 402, 500]) assert.equal(evaluator(charge, expectedCharge, status), 'invalid')
+      }
+    } finally { process.env.CULQI_SECRET_KEY = 'sk_test_SYNTHETIC' }
+  })
+}
+test('clave ausente/desconocida no autoriza ningún entorno', () => {
+  for (const key of [undefined, '', 'pk_test_fixture', 'sk_unknown_fixture', 'sk_live_', 'sk_test_fixture extra']) {
+    assert.equal(getCulqiEnvironment(key ?? ''), null)
+    assert.equal(validateCulqiChargeId('chr_test_fixture', getCulqiEnvironment(key ?? '')), false)
+    assert.equal(validateCulqiOrderId('ord_live_fixture', getCulqiEnvironment(key ?? '')), false)
   }
 })
-
-test('cargo sin estado conserva validaciones de identidad, monto, PEN, descripción y metadata', () => {
-  const checkoutId = '249e9e14-c3b7-4761-a62b-4588d417db8d'
-  const charge = { id: 'chr_test_1234567890123456', amount: 5000, currency_code: 'PEN',
-    description: `Gift Card ${checkoutId}`, response_code: null, state: null }
-  const expectedCharge = { id: charge.id, amountInCents: 5000, description: charge.description, checkoutId,
-    allowMissingStatus: true }
-  assert.equal(confirmedCulqiCharge(charge, expectedCharge), true)
-  assert.equal(confirmedCulqiCharge({ ...charge, amount: 4999 }, expectedCharge), false)
-  assert.equal(confirmedCulqiCharge({ ...charge, currency_code: 'USD' }, expectedCharge), false)
-  assert.equal(confirmedCulqiCharge({ ...charge, currency: 'USD' }, expectedCharge), false)
-  assert.equal(confirmedCulqiCharge({ ...charge, description: 'Gift Card diferente' }, expectedCharge), false)
-  assert.equal(confirmedCulqiCharge({ ...charge, description: null }, expectedCharge), false)
-  assert.equal(confirmedCulqiCharge({ ...charge, id: 'ord_test_1234567890123456' }, { ...expectedCharge, id: 'ord_test_1234567890123456' }), false)
-  assert.equal(confirmedCulqiCharge({ ...charge, id: 'chr_test_otro' }, expectedCharge), false)
-  assert.equal(confirmedCulqiCharge({ ...charge, metadata: { checkout_id: checkoutId } }, expectedCharge), true)
-  assert.equal(confirmedCulqiCharge({ ...charge, metadata: { checkout_id: 'otro-checkout' } }, expectedCharge), false)
-  assert.equal(confirmedCulqiCharge({ ...charge, metadata: null }, expectedCharge), true)
-})
-
 test('un culqi_charge_id ya utilizado se rechaza al vincular otra compra', async () => {
   const { recordGiftCharge } = await import('../netlify/lib/gift-cards.ts')
   const originalFetch = globalThis.fetch

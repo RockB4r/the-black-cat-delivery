@@ -6,7 +6,7 @@ import { getOnlineOrderingAvailability } from '../lib/online-ordering'
 import { getUnavailableProducts, ProductAvailabilityError } from '../lib/product-availability'
 import { confirmPromotionUse, releasePromotion } from '../lib/promotions'
 import { applyGiftToOrder, beginMixedCulqiAttempt, completeMixedCulqiAttempt, getMixedCulqiAttempts, getOrderGiftPayment, markMixedCulqiAttempt } from '../lib/gift-cards'
-import { confirmedCulqiCharge, confirmedCulqiOrder, expiredCulqiOrder, matchingCulqiOrder } from '../lib/culqi-verification'
+import { evaluateOriginalChargeResponse, confirmedCulqiOrder, expiredCulqiOrder, matchingCulqiOrder, getCulqiEnvironment, validateCulqiReferences } from '../lib/culqi-verification'
 
 type CulqiErrorData = {
   type?: unknown
@@ -40,6 +40,7 @@ export default async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') {
     return json(405, { approved: false, message: 'Método no permitido.' })
   }
+  if (!getCulqiEnvironment()) return new Response(null, { status: 503 })
   const kitchenAvailability = await getOnlineOrderingAvailability()
   if (!kitchenAvailability.isOpen) return json(403, { approved: false, message: kitchenAvailability.message })
 
@@ -54,6 +55,7 @@ export default async (request: Request): Promise<Response> => {
 
   const order = await getOrderByCheckoutId(input.checkoutId)
   if (!order || order.paymentStatus === 'expired' || !internalOrderId || order.databaseOrderId !== internalOrderId) return json(409, { approved: false, message: 'Este intento de pago ya no está disponible. Inicia un nuevo pedido.' })
+  if (!validateCulqiReferences(order.culqiOrderId, order.culqiChargeId)) return json(409, { approved: false, message: 'El pedido no pertenece al entorno de pago configurado.' })
   if (order.paymentStatus === 'paid') return json(200, { approved: true, chargeId: order.culqiChargeId, orderId: order.orderId })
   const giftPayment = order.databaseOrderId ? await getOrderGiftPayment(order.databaseOrderId) : null
   if ((giftPayment && giftPayment.status !== 'reserved') || amount !== Math.round((giftPayment?.other_amount ?? order.total) * 100) || order.email !== input.email || order.checkoutId !== input.checkoutId) return json(409, { approved: false, message: 'Los datos del intento de pago no coinciden. Inicia un nuevo pedido.' })
@@ -74,7 +76,7 @@ export default async (request: Request): Promise<Response> => {
   if (!paymentLock.modified) return json(409, { approved: false, message: 'Este pago ya se está procesando. Espera unos segundos antes de reintentar.' })
 
   const secretKey = process.env.CULQI_SECRET_KEY
-  if (!secretKey) {
+  if (!getCulqiEnvironment(secretKey)) {
     await getStore({ name: 'the-black-cat-payment-locks', consistency: 'strong' }).delete(paymentLockKey)
     console.error('CULQI_SECRET_KEY is not configured.')
     return json(500, { approved: false, message: 'El pago no está disponible temporalmente.' })
@@ -177,11 +179,10 @@ export default async (request: Request): Promise<Response> => {
       ? culqiData.id
       : undefined
 
-    if (!chargeId) throw new Error('Culqi did not return a charge identifier.')
+    if (!chargeId || evaluateOriginalChargeResponse(culqiData, { id: chargeId, amountInCents: amount as number,
+      description: `Pedido ${order.orderId}`, checkoutId: input.checkoutId }, culqiResponse.status) !== 'approved') throw new Error('Culqi charge is not confirmed for this order and environment')
     if (giftPayment) {
       if (!order.databaseOrderId) throw new Error('Gift Card order has no database identifier')
-      if (!confirmedCulqiCharge(culqiData, { id: chargeId, amountInCents: amount as number,
-        description: `Pedido ${order.orderId}`, checkoutId: input.checkoutId, allowMissingStatus: culqiResponse.status === 201 })) throw new Error('Culqi charge is not confirmed for this order and amount')
       if (!mixedAttemptId) throw new Error('Mixed Culqi attempt was not persisted')
       await completeMixedCulqiAttempt(order.databaseOrderId, mixedAttemptId, chargeId, chargeId, 'culqi_charge')
     }

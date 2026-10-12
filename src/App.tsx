@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { ensureCulqiEnvironment } from './lib/culqiEnvironment'
 import menuData from './data/menu.json'
 import type { MenuCategory, MenuItem } from './data/types'
 import { productKey } from './data/productKeys'
@@ -395,6 +396,7 @@ function App() {
     {
       setIsProcessingPayment(true)
       try {
+        await ensureCulqiEnvironment(culqiPublicKey)
         const response = await fetch('/.netlify/functions/create-culqi-order', {
           method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ ...orderPayload, currency: 'PEN' }),

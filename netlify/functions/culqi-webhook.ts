@@ -2,21 +2,22 @@ import { notifyOrder } from '../lib/notifications'
 import { getOrder, getOrderIdByCulqiOrder, saveOrder } from '../lib/orders'
 import { confirmPromotionUse, releasePromotion } from '../lib/promotions'
 import { applyGiftToOrder, completeMixedCulqiAttempt, finalizeGiftPurchase, getGiftPurchaseByCulqiOrder, getLinkedMixedCulqiCharge, getMixedCulqiAttempts, getOrderGiftPayment, markMixedCulqiAttempt, markMixedCulqiExpired, releaseGiftReservation, setGiftPaymentState } from '../lib/gift-cards'
-import { culqiGiftCardOrderNumber, confirmedCulqiOrder, expiredCulqiOrder } from '../lib/culqi-verification'
+import { culqiGiftCardOrderNumber, confirmedCulqiOrder, expiredCulqiOrder, getCulqiEnvironment, validateCulqiOrderId } from '../lib/culqi-verification'
 
 const response = (status: number) => new Response(null, { status })
 
 export default async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') return response(405)
+  if (!getCulqiEnvironment()) return new Response(null, { status: 503 })
   const event: unknown = await request.json().catch(() => null)
   const data = event && typeof event === 'object' ? event as Record<string, unknown> : null
   const eventData = data?.data && typeof data.data === 'object' ? data.data as Record<string, unknown> : data
   const culqiOrderId = typeof eventData?.id === 'string' ? eventData.id : ''
-  if (!culqiOrderId.startsWith('ord_')) return response(400)
+  if (!validateCulqiOrderId(culqiOrderId)) return response(400)
 
   // We verify the event against Culqi's authenticated Orders API before updating the order.
   const secretKey = process.env.CULQI_SECRET_KEY
-  if (!secretKey) return response(500)
+  if (!getCulqiEnvironment(secretKey)) return response(500)
   try {
     const culqiResponse = await fetch(`https://api.culqi.com/v2/orders/${encodeURIComponent(culqiOrderId)}`, { headers: { Authorization: `Bearer ${secretKey}` } })
     const culqiOrder: unknown = await culqiResponse.json().catch(() => null)
