@@ -8,6 +8,7 @@ import { notifyOrder } from '../lib/notifications'
 import { getStore } from '@netlify/blobs'
 import { matchingCulqiOrder, getCulqiEnvironment, validateCulqiOrderId, validateCulqiReferences } from '../lib/culqi-verification'
 import { normalizeGiftPaymentCode } from '../../src/lib/giftPaymentCode'
+import { giftCardOperationBlock } from '../lib/gift-card-operations'
 
 export default async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') return json(405, { message: 'Método no permitido.' })
@@ -22,6 +23,11 @@ export default async (request: Request): Promise<Response> => {
   if (rawGiftPaymentCode && !giftPaymentCode) return json(400, { message: 'Código de Gift Card inválido.' })
   if (!input || data?.currency !== 'PEN') return json(400, { message: 'Los datos del pedido no son válidos.' })
   const secretKey = process.env.CULQI_SECRET_KEY
+
+  if (giftPaymentCode) {
+    const blocked = await giftCardOperationBlock('redemption')
+    if (blocked) return blocked
+  }
 
   let unavailableProducts: string[]
   try {

@@ -7,6 +7,7 @@ import { getUnavailableProducts, ProductAvailabilityError } from '../lib/product
 import { confirmPromotionUse, releasePromotion } from '../lib/promotions'
 import { applyGiftToOrder, beginMixedCulqiAttempt, completeMixedCulqiAttempt, getMixedCulqiAttempts, getOrderGiftPayment, markMixedCulqiAttempt } from '../lib/gift-cards'
 import { evaluateOriginalChargeResponse, confirmedCulqiOrder, expiredCulqiOrder, matchingCulqiOrder, getCulqiEnvironment, validateCulqiReferences } from '../lib/culqi-verification'
+import { giftCardOperationBlock } from '../lib/gift-card-operations'
 
 type CulqiErrorData = {
   type?: unknown
@@ -108,6 +109,13 @@ export default async (request: Request): Promise<Response> => {
       if (expiresAt && expiresAt <= Math.floor(Date.now() / 1000) + 120) { await getStore({ name: 'the-black-cat-payment-locks', consistency: 'strong' }).delete(paymentLockKey); return json(409, { approved: false, message: 'La orden de pago está por vencer. Inicia un nuevo pedido.' }) }
     }
     const { firstName, lastName } = customerNames(order.customer)
+    if (giftPayment) {
+      const blocked = await giftCardOperationBlock('redemption')
+      if (blocked) {
+        await getStore({ name: 'the-black-cat-payment-locks', consistency: 'strong' }).delete(paymentLockKey)
+        return blocked
+      }
+    }
     const phoneNumber = order.phone.replace(/\D/g, '')
     if (giftPayment && order.databaseOrderId && order.culqiOrderId) {
       const attempt = await beginMixedCulqiAttempt(order.databaseOrderId, input.checkoutId, order.culqiOrderId)

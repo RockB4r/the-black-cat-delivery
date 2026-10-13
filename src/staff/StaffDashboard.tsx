@@ -6,6 +6,7 @@ import type { Consumption, ConsumptionAudit, Member, PointMovement, ReceiptType,
 import { PromotionManagement } from './PromotionManagement'
 import { WhatsAppAlerts } from './WhatsAppAlerts'
 import { GiftCardsPanel } from './GiftCardsPanel'
+import { GiftCardOperationsPanel } from './GiftCardOperationsPanel'
 
 const memberFields = 'id, document_type, document_number, dni, full_name, phone, email, birth_date, joined_at, points_balance, status, marketing_consent'
 const consumptionFields = 'id, member_id, amount, points_earned, receipt_type, receipt_series, receipt_number, status, registered_by, consumed_at'
@@ -187,6 +188,7 @@ export function StaffDashboard({ profile, userId, onSignOut }: { profile: StaffP
   const canOperate = member?.status === 'active'; const previewPoints = earned(Number(amount) || 0); const remaining = member ? Math.max(0, 20 - member.points_balance) : 20; const correctionPoints = earned(Number(correctionAmount) || 0); const correctionDelta = correcting ? correctionPoints - earned(correcting.amount) : 0
   const displayedDocumentType = member?.document_type ?? 'DNI'; const displayedDocumentNumber = member?.document_number ?? member?.dni ?? '—'
   return <main className="staff-page"><section className="staff-card staff-dashboard"><header className="staff-header"><div><p className="eyebrow">THE BLACK CAT · STAFF</p><h1>Hola, {profile.display_name}</h1><p className="staff-role">Rol detectado: {profile.role}</p></div><button className="back-button staff-signout" type="button" onClick={() => void onSignOut()}>Cerrar sesión</button></header>
+    {canManageKitchen && <GiftCardOperationsPanel userId={userId} />}
     {canUseBasicFeatures && <GiftCardsPanel profile={profile} />}
     {canUseBasicFeatures && <WhatsAppAlerts />}
     {isAdmin && <section className="staff-section"><h2>Exportar socios</h2><p>Descarga los datos de contacto, documentos, fechas, puntos, estado y consentimiento de los socios del Club Black Cat.</p><button type="button" className="staff-primary" disabled={exportingMembers} onClick={() => void exportMembers()}>{exportingMembers ? 'Generando Excel…' : 'Exportar socios a Excel'}</button>{exportMessage && <p className="staff-message" role="status">{exportMessage}</p>}</section>}

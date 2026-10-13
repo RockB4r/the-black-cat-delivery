@@ -1,4 +1,5 @@
 import { finalizeGiftPurchase, getGiftPurchaseByAccess, giftChargeLock, recordGiftCharge } from '../lib/gift-cards'
+import { giftCardOperationBlock } from '../lib/gift-card-operations'
 import { json } from '../lib/request'
 import { culqiGiftCardOrderNumber, evaluateOriginalChargeResponse, confirmedCulqiOrder, expiredCulqiOrder, matchingCulqiOrder, getCulqiEnvironment, validateCulqiChargeId, validateCulqiReferences } from '../lib/culqi-verification'
 
@@ -32,6 +33,8 @@ export default async (request: Request): Promise<Response> => {
       if (!matchingCulqiOrder(order, expected)) return json(409, { message: 'La orden de Culqi no coincide con esta compra.' })
     }
     if (purchase.culqi_charge_id) return json(202, { approved: false, pending: true, message: 'Pago en conciliación. Consulta el estado antes de reintentar.' })
+    const blocked = await giftCardOperationBlock('sales')
+    if (blocked) return blocked
     const lock = await giftChargeLock().set(purchase.checkout_id, 'processing', { onlyIfNew: true })
     if (!lock.modified) return json(409, { message: 'Este pago ya se está procesando. Consulta su estado.' })
     const [firstName, ...lastName] = purchase.purchaser_name.split(/\s+/)
