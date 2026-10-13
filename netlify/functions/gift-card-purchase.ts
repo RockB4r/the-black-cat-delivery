@@ -1,4 +1,5 @@
 import { attachGiftCulqiOrder, createGiftPurchase, giftPurchaseLock, parseGiftPurchase } from '../lib/gift-cards'
+import { giftCardOperationBlock } from '../lib/gift-card-operations'
 import { json } from '../lib/request'
 import { culqiGiftCardOrderNumber, matchingCulqiOrder, sanitizeCulqiErrorBody, getCulqiEnvironment, validateCulqiOrderId, validateCulqiReferences } from '../lib/culqi-verification'
 
@@ -10,6 +11,8 @@ export default async (request: Request): Promise<Response> => {
   const secretKey = process.env.CULQI_SECRET_KEY
   if (!getCulqiEnvironment(secretKey)) return json(503, { message: 'El pago no está disponible temporalmente.' })
   try {
+    const blocked = await giftCardOperationBlock('sales')
+    if (blocked) return blocked
     const purchase = await createGiftPurchase(input)
     if (!validateCulqiReferences(purchase.culqi_order_id, purchase.culqi_charge_id)) return json(409, { message: 'La compra no pertenece al entorno de pago configurado.' })
     if (purchase.culqi_order_id) return json(200, { checkoutId: purchase.checkout_id, accessToken: purchase.access_token, culqiOrderId: purchase.culqi_order_id, amountInCents: Math.round(Number(purchase.amount) * 100), status: purchase.payment_status, pendingReconciliation: Boolean(purchase.culqi_charge_id) })
