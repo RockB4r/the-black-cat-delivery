@@ -10,8 +10,17 @@ export default async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') return response(405)
   if (!getCulqiEnvironment()) return new Response(null, { status: 503 })
   const event: unknown = await request.json().catch(() => null)
-  const data = event && typeof event === 'object' ? event as Record<string, unknown> : null
-  const eventData = data?.data && typeof data.data === 'object' ? data.data as Record<string, unknown> : data
+  const data = event && typeof event === 'object' && !Array.isArray(event) ? event as Record<string, unknown> : null
+  if (!data || (data.type !== undefined && data.type !== 'order.status.changed')) return response(400)
+  // Culqi envelopes may contain an object or JSON-encoded object.
+  // Keep direct order payload compatibility, but never fall back to the event id
+  // when an envelope supplies invalid data.
+  let normalized: unknown = 'data' in data ? data.data : data
+  if (typeof normalized === 'string') {
+    try { normalized = JSON.parse(normalized) } catch { return response(400) }
+  }
+  if (!normalized || typeof normalized !== 'object' || Array.isArray(normalized)) return response(400)
+  const eventData = normalized as Record<string, unknown>
   const culqiOrderId = typeof eventData?.id === 'string' ? eventData.id : ''
   if (!validateCulqiOrderId(culqiOrderId)) return response(400)
 

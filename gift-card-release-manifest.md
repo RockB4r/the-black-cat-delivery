@@ -1,11 +1,21 @@
 # Manifest del candidato local Gift Cards Phase 2
-Fecha: 2026-10-12. No autorizada publicación.
+Fecha baseline: 2026-10-12. Actualización 2026-10-13: push de candidato autorizado; NO rollout/merge/main/deploy productivo.
 Base exacta: 33dc0b86ec5f164d01a0f9257e823007e33de433 (main).
 Fuente validada: 01f127cadc24fd2c953e2c7aeaaa03b0b5b12abe (staging).
 Rama: gift-cards-phase2-release. Checkout separado; staging se conserva intacto.
 Estrategia: commit consolidado reproducible desde main con lista A/B. No cherry-pick ciego de commits mezclados ni arrastre de endpoints temporales.
-45 archivos seleccionados (27 A, 18 B), más este manifest y runbook operativo. Las pruebas/fixtures excluidos permanecen en staging como evidencia de validación, no se ejecutan ni se instalan en producción. Los tests preexistentes en main no se borran.
-PASS de alcance no implica autorización de rollout: falta suspensión aprobada/implementada, backup restaurado y certificación privada de variables/Culqi.
+45 archivos seleccionados (27 A, 18 B), más este manifest y runbook operativo, constituyen el baseline histórico. El delta de suspensión fue añadido después. Las pruebas/fixtures permanecen en staging como evidencia de validación; por el criterio final aprobado se retiran también los tests heredados de main SOLO en release. No se eliminan pruebas de staging.
+PASS de alcance no implica autorización de rollout. Backup/restore, certificación privada y suspensión staging ya tienen PASS documentado; webhook LIVE y pasos productivos siguen pendientes.
+
+## Delta final aprobado 2026-10-13
+
+- Runtime necesario: normalización segura en culqi-webhook.ts. data objeto o string JSON -> objeto no-array; entradas inválidas -> 400; type explícito ajeno rechazado. Se preserva payload de orden directo legacy, y la validación de ID/entorno/GET autenticado, monto/PEN/estado, idempotencia/reservas.
+- TEST NECESARIO PERO NO PRODUCTIVO -> ELIMINAR DEL RELEASE: tests/export-members-xlsx.test.mjs, tests/export-members.test.mjs, tests/gift-card-operations.sql, tests/gift-card-operations.test.mjs, tests/gift-card-permissions.test.mjs, tests/gift-card-presentation.test.mjs, tests/gift-card-unblock.sql. Copias idénticas (normalizando únicamente CRLF) verificadas en staging antes de retirarlas. Todos se conservan allí.
+- Nuevo test tests/culqi-webhook-payload.test.mjs: solo staging; ejecuta handler real con HTTP/persistencia inyectados, sin solicitudes externas/credenciales reales.
+- DOCUMENTACIÓN: este manifest y gift-card-final-preflight-resolution.md.
+- RUNTIME NECESARIO: el resto del paquete funcional/infraestructura no se altera para esta corrección. Nombres test/live y soporte TEST en validadores son lógica de aislamiento necesaria, NO fixtures que deban eliminarse.
+- Siete migraciones y rollbacks: sin cambios de contenido; checksums revalidados. No apply ni db push.
+- No fixtures, tests, Admin Staging, endpoints temporales, staging_migrations, datos TEST, .env/secretos o flyers/VIP nuevos en el árbol candidato final. El historial Git retiene los commits previos: no se reescribe y no equivale a borrar evidencia histórica.
 
 ## Clasificación de commits
 | Commit | Asunto | Clasificación y decisión |
