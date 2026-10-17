@@ -706,7 +706,7 @@ function App() {
                     {['Efectivo', 'Pagar con Culqi', 'Gift Card'].map((method) => (
                       <label key={method} className={paymentMethod === method ? 'payment-option active' : 'payment-option'}>
                         <input type="radio" name="payment" value={method} checked={paymentMethod === method} onChange={() => { if (paymentMethod !== method) { checkoutIdRef.current = crypto.randomUUID(); internalOrderIdRef.current = null } setPaymentMethod(method) }} />
-                        {method}
+                        {method === 'Pagar con Culqi' ? 'Pagar con Tarjeta / Yape' : method}
                       </label>
                     ))}
                   </div>
@@ -719,7 +719,7 @@ function App() {
                 {unavailableCartItems.length > 0 && <div className="unavailable-cart-warning" role="status"><strong>Uno o más productos de tu carrito ya no están disponibles.</strong><span>{unavailableCartItems.map((item) => item.name).join(', ')}</span><button className="remove-button" type="button" onClick={removeUnavailableItems}>Eliminar productos agotados</button></div>}
                 {!orderingOpen && <p className="ordering-closed checkout-closed" role="status"><strong>{manualKitchenClosed ? 'Cocina cerrada temporalmente' : 'Cocina Cerrada'}</strong><span>{manualKitchenClosed ? 'Intenta nuevamente más tarde.' : `Nuestro horario de atención online es: ${onlineOrderingHours.display}`}</span></p>}
                 {!isCashPayment && <button className="culqi-button" type="button" disabled={!orderingOpen || !canPayWithCulqi || isProcessingPayment || (paymentMethod === 'Gift Card' && giftBalance === null)} onClick={() => { void openCulqiCheckout() }}>
-                  {isProcessingPayment ? 'Procesando pago...' : paymentMethod === 'Gift Card' ? 'Pagar con Gift Card' : 'Pagar con Culqi'}
+                  {isProcessingPayment ? 'Procesando pago...' : paymentMethod === 'Gift Card' ? 'Pagar con Gift Card' : 'Pagar con Tarjeta / Yape'}
                 </button>}
                 {!hasValidEmail && <p className="culqi-help">Ingresa un correo electrónico válido para pagar con Culqi.</p>}
                 {culqiMessage && <p className="culqi-message" role="status">{culqiMessage}</p>}
