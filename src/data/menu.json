@@ -5,8 +5,8 @@
     "items": [
       { "name": "Misfits Burger", "price": 24, "image": "/productos/misfits-burger.jpg", "ingredients": "Salsa casera, lechuga, tomate, 150g de res, cheddar, pickles y crispy onions." },
       { "name": "Queen Burger", "price": 26, "image": "/productos/Queen.jpg", "ingredients": "Salsa casera, lechuga, tomate, 150g de res, cheddar, huevo y cebolla caramelizada." },
-      { "name": "Ramones Burger", "price": 28, "image": "/productos/Ramones.jpg", "ingredients": "Lechuga, tomate, 150g de res, Edam, huevo, doble crispy bacon, salsa BBQ y crispy onions." },
-      { "name": "Rancid Burger", "price": 30, "image": "/productos/Rancid.jpg", "ingredients": "Salsa casera, 150g de res, cheddar, chorizo parrillero, cebolla caramelizada y jalapeños." },
+      { "name": "Ramones Burger", "price": 29, "image": "/productos/Ramones.jpg", "ingredients": "Lechuga, tomate, 150g de res, Edam, huevo, doble crispy bacon, salsa BBQ y crispy onions." },
+      { "name": "Rancid Burger", "price": 34, "image": "/productos/Rancid.jpg", "ingredients": "Salsa casera, 150g de res, cheddar, chorizo parrillero, cebolla caramelizada y jalapeños." },
       { "name": "The Clash Burger", "price": 38, "image": "/productos/TheClash.jpg", "ingredients": "Salsa chipotle, 300g de res, doble cheddar o Edam, chimichurri, crispy onions y jalapeños (opcional)." },
       { "name": "Sex Pistols Burger", "price": 36, "image": "/productos/Sex-Pistol-Burger.png", "ingredients": "Salsa casera, lechuga, tomate, jamón americano, Edam, 150g de res, huevo, chorizo parrillero, BBQ y crispy onions." }
     ]
@@ -29,7 +29,7 @@
       { "name": "Wings", "price": 25, "image": "/productos/Chicken wings.png", "ingredients": "8 alas crujientes, acompañadas de papas fritas y salsa a elección: BBQ, Buffalo, Acevichada o Maracuyá.", "sauces": [{ "name": "BBQ", "price": 25 }, { "name": "Buffalo", "price": 25 }, { "name": "Acevichada", "price": 25 }, { "name": "Maracuyá", "price": 25 }] },
       { "name": "Papas Bravas", "price": 16, "image": "/productos/Papas Bravas.png", "ingredients": "Papas fritas crocantes, cabanossi en trozos y salsa chipotle." },
       { "name": "Papas & Cheddar", "price": 16, "image": "/productos/PapasCheddar.png", "ingredients": "Papas fritas cubiertas con cheddar fundido y cabanossi." },
-      { "name": "Chori-Bravas", "price": 18, "image": "/productos/Chori-Bravas.png", "ingredients": "Papas fritas, chorizo estilo alemán en rodajas y salsa chipotle." },
+      { "name": "Chori-Bravas", "price": 20, "image": "/productos/Chori-Bravas.png", "ingredients": "Papas fritas, chorizo estilo alemán en rodajas y salsa chipotle." },
       { "name": "Nachos", "price": 15, "image": "/productos/Nachos.png", "ingredients": "Nachos crocantes con cheddar fundido y jalapeños." },
       { "name": "Tequeños", "price": 18, "image": "/productos/Tequeños.png", "ingredients": "Tequeños rellenos de queso, acompañados de salsa de ajo." }
     ]
