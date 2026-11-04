@@ -274,6 +274,10 @@ export const hasUnresolvedMixedCulqiAttempt = async (orderId: string) => {
 export const beginMixedCulqiAttempt = (orderId: string, checkoutId: string, culqiOrderId: string) => database<{ id: string; status: string }>('rpc/begin_mixed_culqi_attempt', {
   method: 'POST', body: JSON.stringify({ p_order_id: orderId, p_checkout_id: checkoutId, p_culqi_order_id: culqiOrderId }),
 })
+export const transitionMixed3DS = (orderId: string, attemptId: string, contextHash: string, tokenHash: string, transition: 'initialize' | 'await' | 'continue' | 'cancel') =>
+  database<boolean>('rpc/transition_mixed_culqi_3ds', { method: 'POST', body: JSON.stringify({
+    p_order_id: orderId, p_attempt_id: attemptId, p_context_hash: contextHash, p_continuation_hash: tokenHash, p_transition: transition,
+  }) })
 export const markMixedCulqiAttempt = (attemptId: string, status: 'rejected' | 'reconciliation_required', source: string) => database<boolean>('rpc/mark_mixed_culqi_attempt', {
   method: 'POST', body: JSON.stringify({ p_attempt_id: attemptId, p_status: status, p_source: source }),
 })

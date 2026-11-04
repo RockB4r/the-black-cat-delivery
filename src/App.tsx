@@ -6,6 +6,7 @@ import { productKey } from './data/productKeys'
 import { isOnlineOrderingOpen, onlineOrderingHours } from './lib/onlineOrdering'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { normalizeGiftPaymentCode } from './lib/giftPaymentCode'
+import { authenticateMixedPayment, loadCulqi3DS, validDeviceFingerprint, type ThreeDSApi } from './lib/culqi3ds'
 import './App.css'
 
 type CartItem = { id: string; productKey: string; name: string; price: number; quantity: number; note?: string; style?: string; sauce?: string }
@@ -34,6 +35,9 @@ type CulqiChargeResponse = {
   orderId?: string
   code?: string
   unavailable_products?: string[]
+  authenticationRequired?: boolean
+  attemptId?: string
+  continuationToken?: string
 }
 type OrderRequestResponse = {
   internalOrderId?: string
@@ -85,6 +89,14 @@ function App() {
   const checkoutIdRef = useRef<string | null>(null)
   const internalOrderIdRef = useRef<string | null>(null)
   const culqiAmountRef = useRef(0)
+  const mixedBusyRef = useRef(false)
+  const mixedDeviceRef = useRef<{ sdk: ThreeDSApi; fingerprint: string; checkoutId: string } | null>(null)
+  useEffect(() => {
+    if (paymentMethod === 'Gift Card') void loadCulqi3DS().catch(() => undefined)
+  }, [paymentMethod])
+  const [mixedCheckoutStopped, setMixedCheckoutStopped] = useState(() => {
+    try { return !!sessionStorage.getItem('tbc-mixed-payment-inflight') } catch { return false }
+  })
   const activeCategory = menuCategories.find(({ id }) => id === activeCategoryId) ?? menuCategories[0]
   const isCraftBeerCategory = activeCategory.id === 'cervezas-artesanales'
   const itemCount = cartItems.reduce((total, item) => total + item.quantity, 0)
@@ -307,28 +319,60 @@ function App() {
 
   const handleCulqiAction = async (culqi: CulqiCheckoutInstance) => {
     if (culqi.token) {
+      const isMixedCard = paymentMethod === 'Gift Card' && !culqi.token.id.startsWith('ype_')
+      if (paymentMethod === 'Gift Card' && (mixedBusyRef.current || mixedCheckoutStopped)) return
+      if (paymentMethod === 'Gift Card') mixedBusyRef.current = true
       culqi.close()
       const order = getOrderPayload()
       if (!order) return
       setIsProcessingPayment(true)
       setCulqiMessage('Procesando pago...')
-
+      let threeDS: ThreeDSApi | undefined
       try {
-        const response = await fetch('/.netlify/functions/create-culqi-charge', {
+        const capturedCheckout = order.checkoutId
+        const capturedOrder = internalOrderIdRef.current
+        const sourceToken = culqi.token.id
+        let fingerprint: string | undefined
+        if (paymentMethod === 'Gift Card') {
+          setMixedCheckoutStopped(true)
+          // Contains no token/payment code. Refresh may not automatically resubmit a mixed charge.
+          sessionStorage.setItem('tbc-mixed-payment-inflight', JSON.stringify({ checkoutId: capturedCheckout, orderId: capturedOrder }))
+        }
+        if (isMixedCard) {
+          const prepared = mixedDeviceRef.current
+          if (!prepared || prepared.checkoutId !== capturedCheckout || !validDeviceFingerprint(prepared.fingerprint)) throw new Error('3DS_DEVICE_UNAVAILABLE')
+          threeDS = prepared.sdk
+          fingerprint = prepared.fingerprint
+        }
+        const payload = {
+          token: sourceToken, internalOrderId: capturedOrder, amount: culqiAmountRef.current, currency: 'PEN',
+          ...order, email: order.email, description: `Pedido The Black Cat Rock Bar · ${itemCount} producto(s)`, items: order.items,
+          ...(fingerprint ? { deviceFingerprint: fingerprint } : {}),
+        }
+        const sendCharge = (continuation?: Record<string, unknown>) => fetch('/.netlify/functions/create-culqi-charge', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            token: culqi.token.id,
-            internalOrderId: internalOrderIdRef.current,
-            amount: culqiAmountRef.current,
-            currency: 'PEN',
-            ...order,
-            email: order.email,
-            description: `Pedido The Black Cat Rock Bar · ${itemCount} producto(s)`,
-            items: order.items,
-          }),
+          body: JSON.stringify({ ...payload, ...(continuation ? { threeDS: continuation } : {}) }),
         })
-        const result = await response.json() as CulqiChargeResponse
+        let response = await sendCharge()
+        let result = await response.json() as CulqiChargeResponse
+        if (result.authenticationRequired) {
+          if (!response.ok || !threeDS || !result.attemptId || !result.continuationToken) throw new Error('3DS_CONTEXT_INVALID')
+          const context = { attemptId: result.attemptId, continuationToken: result.continuationToken }
+          let parameters
+          try {
+            setCulqiMessage('Completa la autenticación de tu banco. No vuelvas a pagar.')
+            parameters = await authenticateMixedPayment(threeDS, sourceToken,
+              () => checkoutIdRef.current === capturedCheckout && internalOrderIdRef.current === capturedOrder)
+          } catch {
+            // Only records cancellation. It cannot release the reservation or create a charge.
+            await sendCharge({ ...context, action: 'cancel' }).catch(() => null)
+            setCulqiMessage('Autenticación no completada. No repitas el cargo; contacta al bar con tu pedido.')
+            return
+          }
+          response = await sendCharge({ ...context, action: 'continue', parameters })
+          result = await response.json() as CulqiChargeResponse
+        }
 
         if (!response.ok || !result.approved) {
           setCulqiMessage(orderErrorMessage(result, 'El pago no pudo procesarse. Tu carrito se conserva intacto.'))
@@ -357,9 +401,17 @@ function App() {
         setPromotionCode('')
         setAppliedPromotion(null)
         setCulqiMessage('')
+        if (paymentMethod === 'Gift Card') {
+          sessionStorage.removeItem('tbc-mixed-payment-inflight')
+          setMixedCheckoutStopped(false)
+        }
       } catch {
-        setCulqiMessage('No fue posible conectar con el servicio de pago. Tu carrito se conserva intacto.')
+        setCulqiMessage(paymentMethod === 'Gift Card' ? 'El pago requiere verificación. No repitas el cargo; contacta al bar con tu pedido.' : 'No fue posible conectar con el servicio de pago. Tu carrito se conserva intacto.')
       } finally {
+        try { threeDS?.reset() } catch { /* Do not turn a completed backend result into another charge. */ }
+        mixedDeviceRef.current = null
+        // Old Checkout callbacks must not dispatch again after an uncertain/cancelled result.
+        mixedBusyRef.current = paymentMethod === 'Gift Card'
         setIsProcessingPayment(false)
       }
       return
@@ -376,6 +428,9 @@ function App() {
   }
 
   const openCulqiCheckout = async () => {
+    if (isProcessingPayment) return
+    if (paymentMethod === 'Gift Card' && mixedCheckoutStopped) { setCulqiMessage('Hay un pago mixto previo pendiente de verificar. No repitas el cargo; contacta al bar.'); return }
+    mixedBusyRef.current = false
     if (!canPayWithCulqi) return
     const orderPayload = getOrderPayload()
     if (!orderPayload) return
@@ -397,6 +452,14 @@ function App() {
       setIsProcessingPayment(true)
       try {
         await ensureCulqiEnvironment(culqiPublicKey)
+        if (paymentMethod === 'Gift Card' && giftBalance !== null && totalAfterDiscount > giftBalance) {
+          const sdk = await loadCulqi3DS()
+          sdk.publicKey = culqiPublicKey
+          sdk.settings = { charge: { totalAmount: Math.round((totalAfterDiscount - giftBalance) * 100), currency: 'PEN', returnUrl: window.location.origin + window.location.pathname }, card: { email: orderPayload.email } }
+          const fingerprint = await sdk.generateDevice()
+          if (!validDeviceFingerprint(fingerprint)) throw new Error('3DS_DEVICE_UNAVAILABLE')
+          mixedDeviceRef.current = { sdk, fingerprint, checkoutId: orderPayload.checkoutId }
+        }
         const response = await fetch('/.netlify/functions/create-culqi-order', {
           method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ ...orderPayload, currency: 'PEN' }),
@@ -412,6 +475,7 @@ function App() {
         backendOrderId = result.culqiOrderId
         if (typeof result.amountInCents === 'number' && Number.isSafeInteger(result.amountInCents) && result.amountInCents > 0) amountInCents = result.amountInCents
         culqiAmountRef.current = amountInCents
+        if (mixedDeviceRef.current?.checkoutId === orderPayload.checkoutId) mixedDeviceRef.current.sdk.settings.charge.totalAmount = amountInCents
         setCulqiMessage(`Pago en proceso de confirmación · Pedido: ${result.orderId}`)
       } catch { setCulqiMessage('No fue posible conectar con el servicio de pago.'); return } finally { setIsProcessingPayment(false) }
     }
@@ -444,12 +508,13 @@ function App() {
     })
 
     culqi.culqi = () => {
-      handleCulqiAction(culqi)
+      if (checkoutIdRef.current !== orderPayload.checkoutId) return
+      void handleCulqiAction(culqi)
     }
     culqi.open()
   }
   return (
-    <main className="app-shell">
+    <main className="app-shell" data-mixed-device-ready={!!mixedDeviceRef.current}>
       <header className="topbar">
         <a className="brand" href="#inicio" aria-label="The Black Cat - inicio">
           <img className="brand-logo" src="/branding/LogoTBC.png" alt="The Black Cat" />

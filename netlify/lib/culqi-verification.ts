@@ -55,9 +55,9 @@ export const expiredCulqiOrder = (value: unknown, expected: {
   return matchingCulqiOrder(value, expected) && record(value)?.state === 'expired'
 }
 
-type ChargeExpectation = { amountInCents: number; description: string; id: string; checkoutId?: string }
+export type ChargeExpectation = { amountInCents: number; description: string; id: string; checkoutId?: string; attemptId?: string }
 export type ChargeEvidence = 'approved' | 'failed' | 'ambiguous' | 'invalid'
-const evaluateCharge = (value: unknown, expected: ChargeExpectation, context: 'ORIGINAL_POST' | 'LATER_GET', httpStatus: number): ChargeEvidence => {
+const evaluateCharge = (value: unknown, expected: ChargeExpectation, httpStatus: number): ChargeEvidence => {
   const charge = record(value)
   const metadata = record(charge?.metadata)
   const currency = charge?.currency
@@ -71,16 +71,22 @@ const evaluateCharge = (value: unknown, expected: ChargeExpectation, context: 'O
     && (currencyCode == null || currencyCode === 'PEN')
     && charge.description === expected.description
     && (metadata?.checkout_id == null || metadata.checkout_id === expected.checkoutId)
+    && (!expected.attemptId || metadata?.attempt_id == null || metadata.attempt_id === expected.attemptId)
   if (!matches || httpStatus < 200 || httpStatus >= 300) return 'invalid'
-  if ((charge.response_code != null && charge.response_code !== 'venta_exitosa')
+  if (charge.paid != null && typeof charge.paid !== 'boolean') return 'invalid'
+  const outcome = record(charge.outcome)
+  if (charge.paid === false || charge.capture === false || (outcome?.type != null && outcome.type !== 'venta_exitosa')
+    || (outcome?.code != null && outcome.code !== 'AUT0000')
+    || (charge.action_code != null && charge.action_code !== 'APPROVE')
+    || (charge.response_code != null && charge.response_code !== 'venta_exitosa')
     || (charge.state != null && charge.state !== 'Exitosa')) return 'failed'
-  if (charge.response_code === 'venta_exitosa' || charge.state === 'Exitosa') return 'approved'
-  return context === 'ORIGINAL_POST' && httpStatus === 201 ? 'approved' : 'ambiguous'
+  if (charge.response_code === 'venta_exitosa' || charge.state === 'Exitosa' || outcome?.type === 'venta_exitosa') return 'approved'
+  return 'ambiguous'
 }
 
 export const evaluateOriginalChargeResponse = (value: unknown, expected: ChargeExpectation, httpStatus: number): ChargeEvidence =>
-  evaluateCharge(value, expected, 'ORIGINAL_POST', httpStatus)
+  evaluateCharge(value, expected, httpStatus)
 export const evaluateReconciledChargeResponse = (value: unknown, expected: ChargeExpectation, httpStatus: number): ChargeEvidence =>
-  evaluateCharge(value, expected, 'LATER_GET', httpStatus)
+  evaluateCharge(value, expected, httpStatus)
 export const confirmedCulqiCharge = (value: unknown, expected: ChargeExpectation): boolean =>
   evaluateReconciledChargeResponse(value, expected, 200) === 'approved'

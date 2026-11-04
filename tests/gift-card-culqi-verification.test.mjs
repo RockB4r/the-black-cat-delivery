@@ -75,7 +75,7 @@ for (const environment of ['test', 'live']) {
       assert.equal(validateCulqiOrderId(`ord_${opposite}_fixture`), false)
       const expectedCharge = { id: `chr_${environment}_fixture`, amountInCents: 5000, description: 'Gift Card checkout', checkoutId: 'checkout' }
       const charge = { id: expectedCharge.id, amount: 5000, currency_code: 'PEN', description: expectedCharge.description, response_code: null, state: null }
-      assert.equal(evaluateOriginalChargeResponse(charge, expectedCharge, 201), 'approved')
+      assert.equal(evaluateOriginalChargeResponse(charge, expectedCharge, 201), 'ambiguous')
       assert.equal(evaluateOriginalChargeResponse(charge, expectedCharge, 200), 'ambiguous')
       assert.equal(evaluateReconciledChargeResponse(charge, expectedCharge, 200), 'ambiguous')
       assert.equal(confirmedCulqiCharge(charge, expectedCharge), false)

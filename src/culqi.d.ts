@@ -39,6 +39,7 @@ interface CulqiCheckoutConstructor {
 
 interface Window {
   CulqiCheckout?: CulqiCheckoutConstructor
+  Culqi3DS?: import('./lib/culqi3ds').ThreeDSApi
 }
 
 interface ImportMetaEnv {
