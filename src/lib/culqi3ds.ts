@@ -14,13 +14,33 @@ export const parseAuthentication3DS = (value: unknown): Authentication3DS | null
   return { eci: p.eci, xid: p.xid, cavv: p.cavv, protocolVersion: p.protocolVersion, ...(typeof ds === 'string' ? { directoryServerTransactionId: ds } : {}) }
 }
 
+export type ThreeDSSettings = {
+  charge: { totalAmount: number; currency: 'PEN'; returnUrl: string }
+  card: { email: string }
+}
+
 export type ThreeDSApi = {
   publicKey: string
-  settings: { charge: { totalAmount: number; currency: 'PEN'; returnUrl: string }; card: { email: string } }
+  // The official SDK exposes a setter without a getter. Never read this property.
+  set settings(value: ThreeDSSettings)
   options?: { closeModalAction: () => void }
   generateDevice: () => Promise<string | null>
   initAuthentication: (token: string) => void
   reset: () => void
+}
+
+export const configureCulqi3DS = (sdk: Pick<ThreeDSApi, 'settings'>, config: ThreeDSSettings): void => {
+  const amount = config?.charge?.totalAmount
+  const email = config?.card?.email
+  let returnUrl: URL
+  try { returnUrl = new URL(config?.charge?.returnUrl) } catch { throw new Error('3DS_CONFIGURATION_INVALID') }
+  if (!Number.isSafeInteger(amount) || amount < 300 || amount > 999900 || config.charge.currency !== 'PEN'
+    || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    || !['https:', 'http:'].includes(returnUrl.protocol) || returnUrl.username || returnUrl.password) throw new Error('3DS_CONFIGURATION_INVALID')
+  sdk.settings = {
+    charge: { totalAmount: amount, currency: 'PEN', returnUrl: config.charge.returnUrl },
+    card: { email },
+  }
 }
 
 // Listener lives only for the active operation. It cannot submit twice or resume after refresh.

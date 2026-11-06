@@ -5,7 +5,7 @@ import { stripTypeScriptTypes } from 'node:module'
 import { randomBytes } from 'node:crypto'
 import * as verification from '../netlify/lib/culqi-verification.ts'
 import * as mixed from '../netlify/lib/mixed-3ds.ts'
-import { parseAuthentication3DS, validDeviceFingerprint, authenticateMixedPayment } from '../src/lib/culqi3ds.ts'
+import { parseAuthentication3DS, validDeviceFingerprint, authenticateMixedPayment, configureCulqi3DS } from '../src/lib/culqi3ds.ts'
 
 const checkout = '11111111-1111-4111-8111-111111111111', orderId = '22222222-2222-4222-8222-222222222222'
 const attemptId = '33333333-3333-4333-8333-333333333333', fingerprint = '44444444-4444-4444-8444-444444444444'
@@ -151,6 +151,32 @@ test('parameters reject unknown/incomplete fields; device must be UUID v4', () =
   assert.equal(validDeviceFingerprint('arbitrary'), false)
 })
 
+test('settings setter-only SDK accepts complete configuration and backend amount before logical Checkout open', () => {
+  const assignments = []
+  const sdk = { set settings(value) { assignments.push(structuredClone(value)) } }
+  const config = { charge: { totalAmount: 1200, currency: 'PEN', returnUrl: 'https://staging.invalid/' }, card: { email: 'review@culqi.com' } }
+  let opened = false
+  assert.doesNotThrow(() => {
+    configureCulqi3DS(sdk, config)
+    configureCulqi3DS(sdk, { ...config, charge: { ...config.charge, totalAmount: 1000 } })
+    opened = true
+  })
+  assert.equal(opened, true)
+  assert.deepEqual(assignments, [config, { ...config, charge: { ...config.charge, totalAmount: 1000 } }])
+  assert.equal(sdk.settings, undefined)
+  // A throwing getter makes any accidental settings read fail the regression.
+  const guarded = { set settings(value) { assignments.push(value) }, get settings() { throw new Error('SETTINGS_MUST_NOT_BE_READ') } }
+  assert.doesNotThrow(() => configureCulqi3DS(guarded, config))
+  for (const invalid of [
+    { ...config, charge: { ...config.charge, totalAmount: 0 } },
+    { ...config, charge: { ...config.charge, totalAmount: 1000.5 } },
+    { ...config, charge: { ...config.charge, currency: 'USD' } },
+    { ...config, charge: { ...config.charge, returnUrl: 'javascript:invalid' } },
+    { ...config, card: { email: '' } },
+  ]) assert.throws(() => configureCulqi3DS(sdk, invalid), /CONFIGURATION_INVALID/)
+  assert.equal(assignments.length, 3)
+})
+
 test('SPA preserves refresh guard without tokens and does not change independent GiftCardPurchase', () => {
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
   assert.match(app, /sessionStorage\.setItem\('tbc-mixed-payment-inflight', JSON\.stringify\(\{ checkoutId: capturedCheckout, orderId: capturedOrder \}\)\)/)
@@ -161,5 +187,7 @@ test('SPA preserves refresh guard without tokens and does not change independent
   const tokenHandler = app.slice(app.indexOf('const handleCulqiAction ='), app.indexOf('const openCulqiCheckout ='))
   assert.doesNotMatch(tokenHandler, /generateDevice\(/)
   assert.match(tokenHandler, /prepared.checkoutId !== capturedCheckout/)
+  assert.doesNotMatch(app, /\.settings\b/)
+  assert.match(open, /configureCulqi3DS\(mixedDeviceRef.current.sdk,\s*\{\s*charge: \{ totalAmount: amountInCents/)
   assert.doesNotMatch(readFileSync(new URL('../src/GiftCardPurchase.tsx', import.meta.url), 'utf8'), /Culqi3DS|authenticateMixedPayment/)
 })

@@ -6,7 +6,7 @@ import { productKey } from './data/productKeys'
 import { isOnlineOrderingOpen, onlineOrderingHours } from './lib/onlineOrdering'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { normalizeGiftPaymentCode } from './lib/giftPaymentCode'
-import { authenticateMixedPayment, loadCulqi3DS, validDeviceFingerprint, type ThreeDSApi } from './lib/culqi3ds'
+import { authenticateMixedPayment, configureCulqi3DS, loadCulqi3DS, validDeviceFingerprint, type ThreeDSApi } from './lib/culqi3ds'
 import './App.css'
 
 type CartItem = { id: string; productKey: string; name: string; price: number; quantity: number; note?: string; style?: string; sauce?: string }
@@ -455,7 +455,7 @@ function App() {
         if (paymentMethod === 'Gift Card' && giftBalance !== null && totalAfterDiscount > giftBalance) {
           const sdk = await loadCulqi3DS()
           sdk.publicKey = culqiPublicKey
-          sdk.settings = { charge: { totalAmount: Math.round((totalAfterDiscount - giftBalance) * 100), currency: 'PEN', returnUrl: window.location.origin + window.location.pathname }, card: { email: orderPayload.email } }
+          configureCulqi3DS(sdk, { charge: { totalAmount: Math.round((totalAfterDiscount - giftBalance) * 100), currency: 'PEN', returnUrl: window.location.origin + window.location.pathname }, card: { email: orderPayload.email } })
           const fingerprint = await sdk.generateDevice()
           if (!validDeviceFingerprint(fingerprint)) throw new Error('3DS_DEVICE_UNAVAILABLE')
           mixedDeviceRef.current = { sdk, fingerprint, checkoutId: orderPayload.checkoutId }
@@ -475,7 +475,10 @@ function App() {
         backendOrderId = result.culqiOrderId
         if (typeof result.amountInCents === 'number' && Number.isSafeInteger(result.amountInCents) && result.amountInCents > 0) amountInCents = result.amountInCents
         culqiAmountRef.current = amountInCents
-        if (mixedDeviceRef.current?.checkoutId === orderPayload.checkoutId) mixedDeviceRef.current.sdk.settings.charge.totalAmount = amountInCents
+        if (mixedDeviceRef.current?.checkoutId === orderPayload.checkoutId) configureCulqi3DS(mixedDeviceRef.current.sdk, {
+          charge: { totalAmount: amountInCents, currency: 'PEN', returnUrl: window.location.origin + window.location.pathname },
+          card: { email: orderPayload.email },
+        })
         setCulqiMessage(`Pago en proceso de confirmación · Pedido: ${result.orderId}`)
       } catch { setCulqiMessage('No fue posible conectar con el servicio de pago.'); return } finally { setIsProcessingPayment(false) }
     }
