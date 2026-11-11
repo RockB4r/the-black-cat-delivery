@@ -59,6 +59,21 @@ async function fixture(t, replies = [{ action_code: 'REVIEW' }, approved]) {
 }
 
 test('3DS backend actual handlers, provider mocked; no external HTTP', async t => {
+  await t.test('authenticated captured AUT0000 paid=false completes one logical attempt exactly once', async t => {
+    const captured = { ...approved, paid: false, capture: true, captured: null, authorization_code: 'SYNTHETIC_AUTH',
+      outcome: { type: 'venta_exitosa', code: 'AUT0000' }, response_code: null, state: null, decline_code: null }
+    const f = await fixture(t, [{ action_code: 'REVIEW' }, captured]); const c = await f.start()
+    assert.equal(f.state.phase, 'awaiting_3ds')
+    assert.equal((await f.handler(request({ threeDS: c }))).status, 200)
+    assert.equal(f.state.begins, 1); assert.equal(f.state.completions, 1); assert.equal(f.state.status, 'approved')
+    for (const key of ['source_id','amount','currency_code','metadata','antifraud_details']) assert.deepEqual(f.state.posts[0][key], f.state.posts[1][key])
+    assert.deepEqual(f.state.posts[1].authentication_3DS, parameters)
+    assert.equal((await f.handler(request({ threeDS: c }))).status, 200); assert.equal(f.state.posts.length, 2); assert.equal(f.state.completions, 1)
+  })
+  await t.test('authorization plus decline is reconciliation_required, never rejected or applied', async t => {
+    const f = await fixture(t, [{ action_code: 'REVIEW' }, { ...approved, paid: false, capture: true, authorization_code: 'SYNTHETIC_AUTH', outcome: {type:'venta_exitosa',code:'AUT0000'}, decline_code:'insufficient_funds' }]); const c=await f.start()
+    assert.equal((await f.handler(request({threeDS:c}))).status,502);assert.equal(f.state.status,'reconciliation_required');assert.equal(f.state.completions,0)
+  })
   await t.test('approved without 3DS completes once', async t => { const f = await fixture(t, [approved]); const r = await f.handler(request()); assert.equal(r.status, 200); assert.equal(f.state.completions, 1) })
   await t.test('REVIEW persists awaiting_3ds; successful continuation reuses context', async t => {
     const f = await fixture(t); const continuation = await f.start(); assert.equal(f.state.phase, 'awaiting_3ds'); assert.equal(f.state.completions, 0)
@@ -121,6 +136,7 @@ test('classifier never approves denied or HTTP-only bodies; REVIEW is explicit',
       assert.equal(mixed.classifyMixedCharge({ action_code: 'REVIEW' }, expected, http), 'authentication_required')
       assert.equal(mixed.classifyMixedCharge({ action_code: 'REVIEW', amount: 999 }, expected, http), 'ambiguous')
     }
+    assert.equal(mixed.classifyMixedCharge({object:'error',type:'card_error',outcome:{type:'venta_exitosa',code:'AUT0000'},decline_code:'insufficient_funds'}, expected, 402), 'ambiguous')
   } finally { if (before === undefined) delete process.env.CULQI_SECRET_KEY; else process.env.CULQI_SECRET_KEY = before }
 })
 

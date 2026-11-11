@@ -83,7 +83,7 @@ for (const environment of ['test', 'live']) {
         assert.equal(evaluator({ ...charge, response_code: 'venta_exitosa' }, expectedCharge, 201), 'approved')
         assert.equal(evaluator({ ...charge, state: 'Exitosa' }, expectedCharge, 200), 'approved')
         assert.equal(evaluator({ ...charge, response_code: 'denegada' }, expectedCharge, 201), 'failed')
-        assert.equal(evaluator({ ...charge, state: 'Rechazada', response_code: 'venta_exitosa' }, expectedCharge, 201), 'failed')
+        assert.equal(evaluator({ ...charge, state: 'Rechazada', response_code: 'venta_exitosa' }, expectedCharge, 201), 'ambiguous')
         for (const bad of [{ amount: 4999 }, { currency_code: 'USD' }, { currency: 'USD' }, { description: 'Otra compra' }, { id: `chr_${opposite}_fixture` }, { metadata: { checkout_id: 'other' } }]) {
           assert.equal(evaluator({ ...charge, ...bad }, expectedCharge, 201), 'invalid')
         }
@@ -99,6 +99,62 @@ test('clave ausente/desconocida no autoriza ningún entorno', () => {
     assert.equal(validateCulqiChargeId('chr_test_fixture', getCulqiEnvironment(key ?? '')), false)
     assert.equal(validateCulqiOrderId('ord_live_fixture', getCulqiEnvironment(key ?? '')), false)
   }
+})
+
+const authorizedExpected = { id: 'chr_test_WRwHK3BZ9ZfdIYpy', amountInCents: 1000,
+  description: 'Pedido TBC-20261110-B62678', checkoutId: '4c6c938b-632c-4f21-8172-3d36c752205f', attemptId: '52347d16-f33a-4c1b-b255-21981f1e04d6' }
+// Sanitized observed shape; authorization code replaced. No provider calls.
+const authorizedCharge = { id: authorizedExpected.id, amount: 1000, currency: null, currency_code: 'PEN',
+  description: authorizedExpected.description, capture: true, captured: null, paid: false, state: null, status: null,
+  action_code: null, response_code: null, decline_code: null, authorization_code: 'SYNTHETIC_AUTH',
+  outcome: { type: 'venta_exitosa', code: 'AUT0000' },
+  metadata: { checkout_id: authorizedExpected.checkoutId, attempt_id: authorizedExpected.attemptId } }
+
+test('observed captured authorization AUT0000 + paid=false is approved for POST and GET', () => {
+  process.env.CULQI_SECRET_KEY = 'sk_test_SYNTHETIC'
+  for (const evaluator of [evaluateOriginalChargeResponse, evaluateReconciledChargeResponse]) {
+    for (const http of [200, 201]) assert.equal(evaluator(authorizedCharge, authorizedExpected, http), 'approved')
+    assert.equal(evaluator({ ...authorizedCharge, response_code: 'AUT0000' }, authorizedExpected, 201), 'approved')
+  }
+  assert.equal(confirmedCulqiCharge(authorizedCharge, authorizedExpected), true)
+})
+
+test('positive authorization with identity/money/context mismatch is ambiguous, never approved', () => {
+  for (const bad of [{ amount: 999 }, { currency_code: 'USD' }, { currency: 'USD' }, { description: 'Other order' },
+    { id: 'chr_live_wrong' }, { metadata: { ...authorizedCharge.metadata, checkout_id: 'other' } },
+    { metadata: { ...authorizedCharge.metadata, attempt_id: 'other' } }]) {
+    assert.equal(evaluateOriginalChargeResponse({ ...authorizedCharge, ...bad }, authorizedExpected, 201), 'ambiguous')
+  }
+})
+
+test('authorization conflicting with denial or capture/state is ambiguous', () => {
+  for (const bad of [{ decline_code: 'insufficient_funds' }, { response_code: 'DNGE0003' },
+    { outcome: { type: 'operacion_denegada', code: 'AUT0000' } },
+    { outcome: { type: 'venta_exitosa', code: 'DNGE0003' } },
+    { state: 'Rechazada' }, { status: 'Rechazada' }, { action_code: 'DENY' },
+    { capture: false }, { captured: false }, { capture: 'true' }]) {
+    assert.equal(evaluateOriginalChargeResponse({ ...authorizedCharge, ...bad }, authorizedExpected, 201), 'ambiguous')
+  }
+  for (const http of [400, 402, 500]) assert.equal(evaluateOriginalChargeResponse(authorizedCharge, authorizedExpected, http), 'ambiguous')
+})
+
+test('paid=false or HTTP201 alone never authorizes; complete captured proof/context required', () => {
+  for (const bad of [{ outcome: null }, { outcome: { type: 'venta_exitosa' } }, { authorization_code: '' },
+    { authorization_code: null }, { capture: null }, { metadata: null },
+    { metadata: { checkout_id: authorizedExpected.checkoutId } }]) {
+    assert.equal(evaluateOriginalChargeResponse({ ...authorizedCharge, ...bad }, authorizedExpected, 201), 'ambiguous')
+  }
+  const noEvidence = { ...authorizedCharge, paid: true, outcome: null, authorization_code: null }
+  assert.equal(evaluateOriginalChargeResponse(noEvidence, authorizedExpected, 201), 'ambiguous')
+})
+
+test('explicit denial without authorization evidence fails; unknown codes stay ambiguous', () => {
+  const base = { ...authorizedCharge, authorization_code: null, outcome: null }
+  for (const denial of [{ outcome: { type: 'operacion_denegada', code: 'DNGE0003' } },
+    { decline_code: 'insufficient_funds' }, { response_code: 'denegada' }, { state: 'Rechazada' }]) {
+    assert.equal(evaluateOriginalChargeResponse({ ...base, ...denial }, authorizedExpected, 201), 'failed')
+  }
+  assert.equal(evaluateOriginalChargeResponse({ ...base, response_code: 'UNKNOWN' }, authorizedExpected, 201), 'ambiguous')
 })
 test('un culqi_charge_id ya utilizado se rechaza al vincular otra compra', async () => {
   const { recordGiftCharge } = await import('../netlify/lib/gift-cards.ts')

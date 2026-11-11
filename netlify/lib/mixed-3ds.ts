@@ -24,6 +24,7 @@ export const classifyMixedCharge = (value: unknown, expected: ChargeExpectation,
   const evidence = evaluateOriginalChargeResponse(body, expected, http)
   if (evidence === 'approved') return 'approved'
   if (evidence === 'failed') return 'rejected'
+  if (evidence === 'ambiguous') return 'ambiguous'
   // Decline only if provider supplied an explicit error. Unknown/malformed 4xx remains uncertain.
   if (http >= 400 && http < 500 && body?.object === 'error' && body.type === 'card_error') return 'rejected'
   return 'ambiguous'

@@ -59,6 +59,16 @@ export type ChargeExpectation = { amountInCents: number; description: string; id
 export type ChargeEvidence = 'approved' | 'failed' | 'ambiguous' | 'invalid'
 const evaluateCharge = (value: unknown, expected: ChargeExpectation, httpStatus: number): ChargeEvidence => {
   const charge = record(value)
+  if (!charge) return 'invalid'
+  const outcome = record(charge.outcome)
+  const successCode = (v: unknown) => v === 'venta_exitosa' || v === 'AUT0000'
+  const deniedCode = (v: unknown) => typeof v === 'string' && (['denegada', 'operacion_denegada'].includes(v) || /^DNG[AE]\d{4}$/.test(v))
+  const positive = outcome?.type === 'venta_exitosa' || outcome?.code === 'AUT0000'
+    || successCode(charge.response_code) || charge.state === 'Exitosa'
+  const negative = outcome?.type === 'operacion_denegada' || deniedCode(outcome?.code) || deniedCode(charge.response_code)
+    || ['Rechazada', 'Rechazado'].includes(String(charge.state)) || ['Rechazada', 'Rechazado'].includes(String(charge.status))
+    || ['DENY', 'DECLINE', 'REJECT'].includes(String(charge.action_code))
+    || typeof charge.decline_code === 'string' && charge.decline_code.trim().length > 0
   const metadata = record(charge?.metadata)
   const currency = charge?.currency
   const currencyCode = charge?.currency_code
@@ -72,15 +82,30 @@ const evaluateCharge = (value: unknown, expected: ChargeExpectation, httpStatus:
     && charge.description === expected.description
     && (metadata?.checkout_id == null || metadata.checkout_id === expected.checkoutId)
     && (!expected.attemptId || metadata?.attempt_id == null || metadata.attempt_id === expected.attemptId)
-  if (!matches || httpStatus < 200 || httpStatus >= 300) return 'invalid'
-  if (charge.paid != null && typeof charge.paid !== 'boolean') return 'invalid'
-  const outcome = record(charge.outcome)
-  if (charge.paid === false || charge.capture === false || (outcome?.type != null && outcome.type !== 'venta_exitosa')
-    || (outcome?.code != null && outcome.code !== 'AUT0000')
-    || (charge.action_code != null && charge.action_code !== 'APPROVE')
-    || (charge.response_code != null && charge.response_code !== 'venta_exitosa')
-    || (charge.state != null && charge.state !== 'Exitosa')) return 'failed'
-  if (charge.response_code === 'venta_exitosa' || charge.state === 'Exitosa' || outcome?.type === 'venta_exitosa') return 'approved'
+  // A positive provider decision with a financial/context/HTTP conflict requires reconciliation.
+  if (!matches || httpStatus < 200 || httpStatus >= 300) return positive ? 'ambiguous' : 'invalid'
+  if ([charge.paid, charge.capture, charge.captured].some(v => v != null && typeof v !== 'boolean')
+    || charge.decline_code != null && typeof charge.decline_code !== 'string'
+    || charge.outcome != null && !outcome || charge.metadata != null && !metadata) return 'ambiguous'
+  if (positive && negative) return 'ambiguous'
+  if (negative) return 'failed'
+  const unknownSignal = outcome?.type != null && outcome.type !== 'venta_exitosa'
+    || outcome?.code != null && outcome.code !== 'AUT0000'
+    || charge.response_code != null && !successCode(charge.response_code)
+    || charge.action_code != null && charge.action_code !== 'APPROVE'
+    || charge.state != null && charge.state !== 'Exitosa'
+    || charge.status != null && charge.status !== 'Exitosa'
+  if (unknownSignal || charge.capture === false || charge.captured === false) return 'ambiguous'
+  const authorizedCaptured = outcome?.type === 'venta_exitosa' && outcome.code === 'AUT0000'
+    && currencyCode === 'PEN' && charge.capture === true && typeof charge.authorization_code === 'string'
+    && /^[A-Za-z0-9_-]{1,64}$/.test(charge.authorization_code)
+    && (!expected.checkoutId || metadata?.checkout_id === expected.checkoutId)
+    && (!expected.attemptId || metadata?.attempt_id === expected.attemptId)
+  // paid is not the authorization verdict. The paid=false shape needs the full captured authorization contract.
+  if (charge.paid === false) return authorizedCaptured ? 'approved' : 'ambiguous'
+  // Preserve previously supported explicit success shapes; neither paid=true nor HTTP alone can approve.
+  if (authorizedCaptured || charge.response_code === 'venta_exitosa' || charge.state === 'Exitosa'
+    || outcome?.type === 'venta_exitosa') return 'approved'
   return 'ambiguous'
 }
 
